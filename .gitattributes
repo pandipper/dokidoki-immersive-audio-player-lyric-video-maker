@@ -1,2 +1,11 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# 离线版启动脚本必须保持原样字节，禁止任何换行/编码转换：
+#   .cmd / .bat  -> GBK + CRLF（中文 Windows 双击可运行）
+#   .ps1        -> UTF-8 with BOM（PowerShell 5.1 才不会按 GBK 误解析）
+#   .txt        -> GBK + CRLF（记事本默认编码）
+offline/*.cmd -text
+offline/*.bat -text
+offline/*.ps1 -text
+offline/*.txt -text
