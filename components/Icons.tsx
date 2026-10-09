@@ -67,7 +67,13 @@ import {
   Search,
   Folder,
   Activity,
-  Sliders
+  Sliders,
+  Minus,
+  Crosshair,
+  Magnet,
+  Waves,
+  AudioWaveform,
+  Move
 } from 'lucide-react';
 
 export {
@@ -140,5 +146,11 @@ export {
   Search,
   Folder,
   Activity,
-  Sliders
+  Sliders,
+  Minus,
+  Crosshair,
+  Magnet,
+  Waves,
+  AudioWaveform,
+  Move
 };

@@ -2,6 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   dokidoki 本地中文字体
+   直接内嵌在仓库里，离线可用，不依赖 Google Fonts。
+   由 ChillRoundM.otf / OPPOSans-Bold.ttf 压缩为 WOFF2（体积约减半）。
+   ========================================================================== */
+@font-face {
+  font-family: 'ChillRoundM';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ChillRoundM.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'OPPOSans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/OPPOSans-Bold.woff2') format('woff2');
+}
+
 /* Fonts */
 @font-face {
   font-family: 'Dancing Script';

@@ -3,7 +3,7 @@ import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   Maximize, Minimize, Upload, Music, FileText, Settings, ImageIcon,
   Repeat, Repeat1, Square, Eye, EyeOff, Video, Download, Film, Type, X, ListMusic, Rewind, FastForward,
-  ChevronUp, ChevronDown, Keyboard
+  ChevronUp, ChevronDown, Keyboard, Minus, Crosshair, Magnet, Waves, AudioWaveform, Move, Loader2
 } from './components/Icons';
 import { AudioMetadata, LyricLine, TabView, VisualSlide, VideoPreset, PlaylistItem, RenderConfig, RenderEngine, FFmpegCodec } from './types';
 import { formatTime, parseLRC, parseSRT, parseTTML, parseVTT } from './utils/parsers';
@@ -24,20 +24,37 @@ import {
     getFloatingNotesOutlineSize,
 } from './utils/floatingNotesLayout';
 import { resolveAutoLyricVisibility, getContentIndexAtOffset, isEmptyLyricLine } from './utils/lyricVisibility';
-import { loadGoogleFonts } from './utils/fonts';
 import { PRESET_CYCLE_LIST, PRESET_DEFINITIONS, videoPresetGroups } from './utils/presets';
 import { useUI } from './contexts/UIContext';
+import FloatingVideoWindow from './components/FloatingVideoWindow';
+import { buildEnergyEnvelope, findStrongestPeak, isPeakMeaningful, DEFAULT_SNAP_WINDOW, EnergyEnvelope } from './utils/onsetDetect';
 import { renderWithFFmpeg, renderPlaylistWithFFmpeg, isFFmpegAvailable, getFFmpegCodecs } from './utils/ffmpegRenderer';
 import { renderWithWebCodecs, renderPlaylistWithWebCodecs, isWebCodecsSupported } from './utils/webCodecsRenderer';
 import { extractEmbeddedLyrics } from './utils/embeddedLyrics';
 import { generateRandomRenderConfig } from './utils/randomConfig';
+import { translate, loadLang, saveLang, type Lang } from './locales';
 
-
+/**
+ * 字幕对齐的「锚点」。
+ *
+ * 用户在时间轴前段点一行、后段点一行，各自吸附到最近的强起音点，
+ * 就得到两个 (原时间 → 吸附时间) 的对应关系：
+ *   - 只有一个锚点 → 整条时间轴做常量平移；
+ *   - 有两个锚点 → 在两点之间做线性插值，顺带修正「越往后越偏」的漂移。
+ */
+export interface SyncAnchor {
+    id: string;
+    lineIndex: number;
+    originalTime: number;
+    snappedTime: number;
+    offset: number;      // snappedTime - originalTime
+    strength: number;
+}
 
 function App() {
   const { toast, confirm } = useUI();
   // Refs
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const audioRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -45,10 +62,9 @@ function App() {
   const abortRenderRef = useRef<{ aborted: boolean }>({ aborted: false });
   const exportVideoRef = useRef<() => void>(() => { });
 
-  // Load fonts
-  useEffect(() => {
-    loadGoogleFonts();
-  }, []);
+  // 字体改为「按需加载」：默认使用仓库内置的 ChillRoundM（离线可用），
+  // 只有用户主动选择某个 Google 字体时才会去请求网络。
+  // 详见 utils/fonts.ts 的 ensureFontLoaded()。
 
   // State: Media & Data
   const [audioSrc, setAudioSrc] = useState<string | null>(null);
@@ -62,6 +78,20 @@ function App() {
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [visualSlides, setVisualSlides] = useState<VisualSlide[]>([]);
   const [lyricOffset, setLyricOffset] = useState(0);
+
+  // State: 悬浮视频小窗
+  const [videoWindowVisible, setVideoWindowVisible] = useState(true);
+  const [videoAspect, setVideoAspect] = useState(0); // 0 表示纯音频文件
+
+  // State: 字幕对齐（频谱吸附校正）
+  const [syncMode, setSyncMode] = useState(false);
+  const [syncEnvelope, setSyncEnvelope] = useState<EnergyEnvelope | null>(null);
+  const [syncAnalyzing, setSyncAnalyzing] = useState(false);
+  const [syncAnchors, setSyncAnchors] = useState<SyncAnchor[]>([]);
+  const [syncOffsets, setSyncOffsets] = useState<number[] | null>(null);
+  const [syncWindow, setSyncWindow] = useState(DEFAULT_SNAP_WINDOW);
+  const [awaitingSecondAnchor, setAwaitingSecondAnchor] = useState(false);
+  const [snapPreview, setSnapPreview] = useState<{ lineIndex: number; delta: number; strength: number } | null>(null);
 
   // State: Playback
   const [isPlaying, setIsPlaying] = useState(false);
@@ -102,17 +132,22 @@ function App() {
   const [showShortcutInfo, setShowShortcutInfo] = useState(false);
   const [uiScale, setUiScale] = useState(1.0);
 
+  // 界面语言：默认中文，可切换回英文。词条见 locales/zh.ts
+  const [lang, setLang] = useState<Lang>(loadLang);
+  const tr = useCallback((en: string) => translate(en, lang), [lang]);
+  useEffect(() => { saveLang(lang); }, [lang]);
+
   // State: Drag and Drop
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0);
   const [renderConfig, setRenderConfig] = useState<RenderConfig>({
     backgroundSource: 'custom',
-    backgroundColor: '#581c87',
-    backgroundGradient: 'linear-gradient(to bottom right, #312e81, #581c87, #000000)',
+    backgroundColor: '#0a0a0a',
+    backgroundGradient: 'linear-gradient(135deg, #241a08 0%, #0d0b08 42%, #000000 100%)',
     renderMode: 'current',
     textAlign: 'center',
     contentPosition: 'center',
-    fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+    fontFamily: "'ChillRoundM', ui-sans-serif, system-ui, sans-serif",
     fontSizeScale: 1.0,
     fontColor: '#ffffff',
     textEffect: 'preset',
@@ -285,14 +320,25 @@ function App() {
   );
 
   // Adjusted lyrics based on offset
+  // 每行最终时间 = 原时间 + 全局微调(lyricOffset) + 该行对齐修正(syncOffsets[i])
   const adjustedLyrics = useMemo(() => {
-    if (lyricOffset === 0) return lyrics;
-    return lyrics.map(l => ({
-      ...l,
-      time: l.time + lyricOffset,
-      endTime: l.endTime !== undefined ? l.endTime + lyricOffset : undefined
-    }));
-  }, [lyrics, lyricOffset]);
+    if (lyricOffset === 0 && !syncOffsets) return lyrics;
+    return lyrics.map((l, i) => {
+      const syncShift = syncOffsets?.[i] ?? 0;
+      const total = lyricOffset + syncShift;
+      if (total === 0) return l;
+      return {
+        ...l,
+        time: l.time + total,
+        endTime: l.endTime !== undefined ? l.endTime + total : undefined,
+        // words 的「全局微调」由渲染层负责（那里会再加一次 lyricOffset），
+        // 所以这里只补上「对齐修正」的部分，避免重复偏移。
+        words: syncShift !== 0 && l.words
+          ? l.words.map(w => ({ ...w, startTime: w.startTime + syncShift, endTime: w.endTime + syncShift }))
+          : l.words,
+      };
+    });
+  }, [lyrics, lyricOffset, syncOffsets]);
 
   // Detect unsynced lyrics (all timestamps are 0 — e.g. embedded USLT without timing)
   const isUnsyncedLyrics = useMemo(() => {
@@ -605,7 +651,7 @@ function App() {
       // Auto-enable karaoke highlight if word-level data is detected
       if (parsedLyrics.some(l => l.words && l.words.length > 0)) {
         setRenderConfig(prev => ({ ...prev, highlightEffect: 'karaoke' }));
-        toast.success(`${ext?.toUpperCase()} loaded with word-level timing! Karaoke mode enabled.`);
+        toast.success(`${ext?.toUpperCase()} ${tr('已载入逐字时间轴，已启用卡拉 OK 模式')}`);
       }
       setLyrics(parsedLyrics);
 
@@ -614,7 +660,7 @@ function App() {
       ));
     } catch (err) {
       console.error("Failed to parse lyrics:", err);
-      toast.error("Failed to parse lyric file.");
+      toast.error(tr('Failed to parse lyric file.'));
     }
   };
 
@@ -639,7 +685,7 @@ function App() {
 
   const loadFontFile = async (file: File) => {
     if (!window.FontFace || !document.fonts) {
-      toast.error("Custom fonts are not supported in this browser.");
+      toast.error(tr('Custom fonts are not supported in this browser.'));
       return;
     }
     try {
@@ -660,10 +706,10 @@ function App() {
       setRenderConfig(prev => ({ ...prev, fontFamily: fontId }));
       // setPreset('custom'); // Disabled to allow customized base presets
 
-      toast.success(`Loaded font: ${fontLabel}`);
+      toast.success(`${tr('Loaded font')}: ${fontLabel}`);
     } catch (err) {
       console.error("Failed to load font:", err);
-      toast.error("Failed to load font file.");
+      toast.error(tr('Failed to load font file.'));
     }
   };
 
@@ -762,7 +808,7 @@ function App() {
 
     if (unsupportedFiles.length > 0) {
       unsupportedFiles.forEach(file => {
-        toast.error(`Unsupported file type: ${file.name}`);
+        toast.error(`${tr('Unsupported file type')}: ${file.name}`);
       });
     }
   };
@@ -777,7 +823,7 @@ function App() {
     const file = e.target.files?.[0];
     if (file) {
       if (!window.FontFace || !document.fonts) {
-        toast.error("Custom fonts are not supported in this browser.");
+        toast.error(tr('Custom fonts are not supported in this browser.'));
         return;
       }
       try {
@@ -791,10 +837,10 @@ function App() {
 
         setCustomChannelFontName(fontLabel);
         setRenderConfig(prev => ({ ...prev, channelInfoFontFamily: fontId }));
-        toast.success(`Loaded Channel font: ${fontLabel}`);
+        toast.success(`${tr('Loaded Channel font')}: ${fontLabel}`);
       } catch (err) {
         console.error("Failed to load font:", err);
-        toast.error("Failed to load channel font file.");
+        toast.error(tr('Failed to load channel font file.'));
       }
     }
     e.target.value = '';
@@ -804,7 +850,7 @@ function App() {
     const file = e.target.files?.[0];
     if (file) {
       if (!window.FontFace || !document.fonts) {
-        toast.error("Custom fonts are not supported in this browser.");
+        toast.error(tr('Custom fonts are not supported in this browser.'));
         return;
       }
       try {
@@ -818,10 +864,10 @@ function App() {
 
         setCustomInfoFontName(fontLabel);
         setRenderConfig(prev => ({ ...prev, infoFontFamily: fontId }));
-        toast.success(`Loaded Info font: ${fontLabel}`);
+        toast.success(`${tr('Loaded Info font')}: ${fontLabel}`);
       } catch (err) {
         console.error("Failed to load font:", err);
-        toast.error("Failed to load info font file.");
+        toast.error(tr('Failed to load info font file.'));
       }
     }
     e.target.value = '';
@@ -981,7 +1027,7 @@ function App() {
     if (newVal) {
       setBypassAutoHide(true);
     }
-    toast.success(`Minimal Mode: ${newVal ? 'On' : 'Off'}`, { id: 'minimal-mode' });
+    toast.success(`${tr('Minimal Mode')}: ${tr(newVal ? 'On' : 'Off')}`, { id: 'minimal-mode' });
   };
 
   const handleTimeUpdate = () => {
@@ -996,8 +1042,187 @@ function App() {
   const handleLoadedMetadata = () => {
     if (audioRef.current) {
       setDuration(audioRef.current.duration);
+      // 视频轨道尺寸决定悬浮小窗的宽高比；纯音频文件 videoWidth 为 0
+      const vw = audioRef.current.videoWidth;
+      const vh = audioRef.current.videoHeight;
+      setVideoAspect(vw > 0 && vh > 0 ? vw / vh : 0);
     }
   };
+
+  // ---------------------------------------------------------------------------
+  // 字幕对齐（频谱吸附校正）
+  //
+  // 交互设计：
+  //   1. 点开「对齐」按钮 → 后台一次性分析音频，得到起音强度曲线；
+  //   2. 点选任意一行字幕 → 在该行时间的 ±窗口 内找最强起音峰，作为吸附目标；
+  //   3. 只有一个锚点 → 整条时间轴常量平移；
+  //      点「再加锚点」在文件后段再锚一行 → 两点之间线性插值，修正漂移；
+  //   4. 「应用」把修正写回字幕，「撤销」丢弃。
+  // ---------------------------------------------------------------------------
+
+  /** 按需构建能量包络（每次换文件只分析一次） */
+  const ensureSyncEnvelope = useCallback(async (): Promise<EnergyEnvelope | null> => {
+    if (syncEnvelope) return syncEnvelope;
+    if (!currentAudioFile) {
+      toast.error('请先载入音频或视频');
+      return null;
+    }
+    setSyncAnalyzing(true);
+    try {
+      const env = await buildEnergyEnvelope(currentAudioFile);
+      setSyncEnvelope(env);
+      return env;
+    } catch (err) {
+      console.error('音频分析失败', err);
+      toast.error('音频分析失败：' + ((err as Error)?.message || '未知错误'));
+      return null;
+    } finally {
+      setSyncAnalyzing(false);
+    }
+  }, [syncEnvelope, currentAudioFile, toast]);
+
+  /** 由锚点推导出「每一行」的修正量 */
+  const computeOffsetsFromAnchors = useCallback((anchors: SyncAnchor[]): number[] => {
+    const n = lyrics.length;
+    if (n === 0 || anchors.length === 0) return new Array(n).fill(0);
+
+    const sorted = [...anchors].sort((a, b) => a.originalTime - b.originalTime);
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+
+    // 单锚点，或两端偏移几乎一致（<0.1s）→ 判定为纯偏移，整条时间轴常量平移
+    if (sorted.length === 1 || Math.abs(last.offset - first.offset) < 0.1) {
+      const avg = sorted.reduce((sum, a) => sum + a.offset, 0) / sorted.length;
+      return new Array(n).fill(avg);
+    }
+
+    // 双锚点 → 线性插值：文件开头用第一个锚点，结尾用第二个，中间按位置过渡
+    const span = last.originalTime - first.originalTime;
+    return lyrics.map(line => {
+      if (line.time <= first.originalTime) return first.offset;
+      if (line.time >= last.originalTime) return last.offset;
+      const ratio = span > 0 ? (line.time - first.originalTime) / span : 0;
+      return first.offset + (last.offset - first.offset) * ratio;
+    });
+  }, [lyrics]);
+
+  /** 点选某一行 → 吸附 */
+  const handleAnchorClick = useCallback(async (lineIndex: number) => {
+    const line = lyrics[lineIndex];
+    if (!line) return;
+
+    const env = await ensureSyncEnvelope();
+    if (!env) return;
+
+    const hit = findStrongestPeak(env, line.time, syncWindow);
+    if (!hit || !isPeakMeaningful(env, hit)) {
+      toast.error(`第 ${lineIndex + 1} 行附近（±${syncWindow.toFixed(1)}s）没有检测到明显有声段，可换一行或调小窗口`);
+      return;
+    }
+
+    const anchor: SyncAnchor = {
+      id: Math.random().toString(36).slice(2, 9),
+      lineIndex,
+      originalTime: line.time,
+      snappedTime: hit.time,
+      offset: hit.time - line.time,
+      strength: hit.strength,
+    };
+
+    // 同一行重复点击视为覆盖；最多保留 2 个锚点
+    const withoutSame = syncAnchors.filter(a => a.lineIndex !== lineIndex);
+    let next: SyncAnchor[];
+    if (withoutSame.length >= 2) {
+      // 已有两个锚点：替换离得更远的那个
+      const sorted = [...withoutSame].sort((a, b) => a.originalTime - b.originalTime);
+      const distFirst = Math.abs(anchor.originalTime - sorted[0].originalTime);
+      const distLast = Math.abs(anchor.originalTime - sorted[1].originalTime);
+      next = distFirst < distLast ? [anchor, sorted[1]] : [sorted[0], anchor];
+    } else {
+      next = [...withoutSame, anchor];
+    }
+
+    setSyncAnchors(next);
+    setSyncOffsets(computeOffsetsFromAnchors(next));
+    setAwaitingSecondAnchor(false);
+    setSnapPreview({ lineIndex, delta: anchor.offset, strength: hit.strength });
+
+    // 播放头跳到吸附后的位置，方便立刻用耳朵核对
+    if (audioRef.current) {
+      audioRef.current.currentTime = hit.time;
+      setCurrentTime(hit.time);
+    }
+    toast.success(`第 ${lineIndex + 1} 行吸附：${anchor.offset >= 0 ? '+' : ''}${anchor.offset.toFixed(2)}s`, 1500);
+  }, [lyrics, ensureSyncEnvelope, syncWindow, syncAnchors, computeOffsetsFromAnchors, toast]);
+
+  /** 打开/关闭对齐模式 */
+  const handleToggleSyncMode = useCallback(() => {
+    if (syncMode) {
+      setSyncMode(false);
+      return;
+    }
+    if (lyrics.length === 0) {
+      toast.error('请先载入字幕文件');
+      return;
+    }
+    setSyncMode(true);
+    void ensureSyncEnvelope();
+  }, [syncMode, lyrics.length, ensureSyncEnvelope, toast]);
+
+  /** 丢弃当前锚点与预览 */
+  const resetSync = useCallback(() => {
+    setSyncAnchors([]);
+    setSyncOffsets(null);
+    setSnapPreview(null);
+    setAwaitingSecondAnchor(false);
+  }, []);
+
+  /** 把修正写回字幕 */
+  const applySyncOffsets = useCallback(() => {
+    if (!syncOffsets) {
+      toast.error('还没有锚点，先点选一行字幕');
+      return;
+    }
+    setLyrics(prev => prev.map((l, i) => {
+      const shift = syncOffsets[i] ?? 0;
+      if (shift === 0) return l;
+      return {
+        ...l,
+        time: Math.max(0, l.time + shift),
+        endTime: l.endTime !== undefined ? Math.max(0, l.endTime + shift) : undefined,
+        words: l.words?.map(w => ({
+          ...w,
+          startTime: Math.max(0, w.startTime + shift),
+          endTime: Math.max(0, w.endTime + shift),
+        })),
+      };
+    }));
+    const avg = syncOffsets.reduce((a, b) => a + b, 0) / syncOffsets.length;
+    setSyncAnchors([]);
+    setSyncOffsets(null);
+    setSnapPreview(null);
+    setAwaitingSecondAnchor(false);
+    toast.success(`已应用字幕对齐（平均 ${avg >= 0 ? '+' : ''}${avg.toFixed(2)}s）`);
+  }, [syncOffsets, toast]);
+
+  // 换文件时清空分析结果与锚点（能量包络只对应当前这一条音频）
+  useEffect(() => {
+    setSyncEnvelope(null);
+    setSyncAnchors([]);
+    setSyncOffsets(null);
+    setSnapPreview(null);
+    setAwaitingSecondAnchor(false);
+  }, [audioSrc]);
+
+  /** 已锚定的行号，用于在字幕列表里高亮 */
+  const anchorLineIndices = useMemo(
+    () => new Set(syncAnchors.map(a => a.lineIndex)),
+    [syncAnchors],
+  );
+
+  // 「尚未载入」的占位文案需要跟随语言切换，所以放在渲染期翻译
+  const displayTitle = metadata.title === 'No Audio Loaded' ? tr('No Audio Loaded') : metadata.title;
+  const displayArtist = metadata.artist === 'Select a file' ? tr('Select a file') : metadata.artist;
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value);
@@ -1052,9 +1277,9 @@ function App() {
     console.log(`[Render] Starting Export. Mode: ${renderConfig.renderMode}, Playlist Items: ${playlist.length}, IsPlaylistRender: ${isPlaylistRender}`);
 
     if (isPlaylistRender) {
-      toast.success(`Starting Playlist Render (${playlist.length} songs)...`);
+      toast.success(`${tr('Starting Playlist Render')} (${playlist.length})...`);
     } else {
-      toast.success(`Starting Single Track Render...`);
+      toast.success(tr('Starting Single Track Render...'));
     }
     const queue: {
       audioSrc: string;
@@ -1109,10 +1334,10 @@ function App() {
 
     // Confirm
     const confirmMsg = isPlaylistRender
-      ? `Start rendering ALL ${queue.length} songs from the playlist? This will result in one continuous video.`
-      : `Start rendering ${aspectRatio} (${resolution}) video? This will play the song from start to finish.`;
+      ? `即将导出播放列表中的全部 ${queue.length} 首，合成一个连续视频。`
+      : `即将导出 ${aspectRatio} (${resolution}) 视频，会从头到尾完整播放一遍。`;
 
-    const isConfirmed = await confirm(`${confirmMsg} Please do not switch tabs during rendering.`, "Start Rendering?");
+    const isConfirmed = await confirm(`${confirmMsg}${tr(' Please do not switch tabs during rendering.')}`, tr('Start Rendering?'));
     if (!isConfirmed) {
       // Cleanup generated URLs if aborted immediately
       if (isPlaylistRender) queue.forEach(q => q.isFileSource && URL.revokeObjectURL(q.audioSrc));
@@ -1295,7 +1520,7 @@ function App() {
       else if (audioEl.mozCaptureStream) audioStream = audioEl.mozCaptureStream();
       else throw new Error("Audio capture not supported");
     } catch (e) {
-      toast.error("Your browser does not support audio capture for recording.");
+      toast.error(tr('Your browser does not support audio capture for recording.'));
       setIsRendering(false);
       return;
     }
@@ -1640,7 +1865,7 @@ function App() {
     // Start Processing Queue
     console.log(`[Render] Queue prepared with ${queue.length} items.`);
     if (queue.length === 0) {
-      toast.error("Render queue is empty!");
+      toast.error(tr('Render queue is empty!'));
       setIsRendering(false);
       return;
     }
@@ -1679,22 +1904,22 @@ function App() {
         audioFile = await res.blob();
       } catch (e) {
         console.error("FFmpeg: Failed to fetch audio blob", e);
-        toast.error('Failed to load audio source for rendering.');
+        toast.error(tr('Failed to load audio source for rendering.'));
         return;
       }
     } else {
-      toast.error('Please load an audio file first.');
+      toast.error(tr('Please load an audio file first.'));
       return;
     }
 
     if (!audioFile) {
-      toast.error('No audio file available for FFmpeg export.');
+      toast.error(tr('No audio file available for FFmpeg export.'));
       return;
     }
 
     // Check FFmpeg availability
     if (!isFFmpegAvailable()) {
-      toast.error('FFmpeg requires SharedArrayBuffer. Please ensure proper server headers (COOP/COEP) or use MediaRecorder instead.');
+      toast.error(tr('FFmpeg requires SharedArrayBuffer. Please ensure proper server headers (COOP/COEP) or use MediaRecorder instead.'));
       return;
     }
 
@@ -1883,7 +2108,7 @@ function App() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        toast.success(`Playlist exported successfully! (${result.format.toUpperCase()}, ${Math.round(result.duration)}s)`);
+        toast.success(`${tr('Playlist exported successfully!')} (${result.format.toUpperCase()}, ${Math.round(result.duration)}s)`);
 
       } else {
         const result = await renderWithFFmpeg({
@@ -1923,12 +2148,12 @@ function App() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        toast.success(`Video exported successfully! (${result.format.toUpperCase()}, ${Math.round(result.duration)}s)`);
+        toast.success(`${tr('Video exported successfully!')} (${result.format.toUpperCase()}, ${Math.round(result.duration)}s)`);
       }
     } catch (error: any) {
       if (error.message !== 'Render aborted') {
         console.error('FFmpeg render failed:', error);
-        toast.error(`FFmpeg render failed: ${error.message}`);
+        toast.error(`${tr('FFmpeg render failed')}: ${error.message}`);
       }
     } finally {
       setIsRendering(false);
@@ -1962,21 +2187,21 @@ function App() {
         audioFile = await res.blob();
       } catch (e) {
         console.error("WebCodecs: Failed to fetch audio blob", e);
-        toast.error('Failed to load audio source for rendering.');
+        toast.error(tr('Failed to load audio source for rendering.'));
         return;
       }
     } else {
-      toast.error('Please load an audio file first.');
+      toast.error(tr('Please load an audio file first.'));
       return;
     }
 
     if (!audioFile) {
-      toast.error('No audio file available for export.');
+      toast.error(tr('No audio file available for export.'));
       return;
     }
 
     if (!isWebCodecsSupported()) {
-      toast.error('WebCodecs is not supported in this browser.');
+      toast.error(tr('WebCodecs is not supported in this browser.'));
       return;
     }
 
@@ -2140,7 +2365,7 @@ function App() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        toast.success(`Playlist exported successfully! (${result.format.toUpperCase()}, ${Math.round(result.duration)}s)`);
+        toast.success(`${tr('Playlist exported successfully!')} (${result.format.toUpperCase()}, ${Math.round(result.duration)}s)`);
 
       } else {
         const result = await renderWithWebCodecs({
@@ -2177,12 +2402,12 @@ function App() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        toast.success(`Video exported successfully! (${Math.round(result.duration)}s)`);
+        toast.success(`${tr('Video exported successfully!')} (${Math.round(result.duration)}s)`);
       }
     } catch (error: any) {
       if (error.message !== 'Render aborted') {
         console.error('WebCodecs render failed:', error);
-        toast.error(`Render failed: ${error.message}`);
+        toast.error(`${tr('Render failed')}: ${error.message}`);
       }
     } finally {
       setIsRendering(false);
@@ -2380,12 +2605,12 @@ function App() {
         case 'v':
           e.preventDefault();
           stopPlayback();
-          toast.success("Stopped", { id: 'stop' });
+          toast.success(tr('Stopped'), { id: 'stop' });
           break;
         case 'n':
           e.preventDefault();
           playNextSong();
-          toast.success("Next Song", { id: 'next-song' });
+          toast.success(tr('Next Song'), { id: 'next-song' });
           break;
         case 'o':
           e.preventDefault();
@@ -2394,12 +2619,12 @@ function App() {
           if (newVal) {
             setBypassAutoHide(true);
           }
-          toast.success(`Minimal Mode: ${newVal ? 'On' : 'Off'}`, { id: 'minimal-mode' });
+          toast.success(`${tr('Minimal Mode')}: ${tr(newVal ? 'On' : 'Off')}`, { id: 'minimal-mode' });
           break;
         case 'b':
           e.preventDefault();
           playPreviousSong();
-          toast.success("Previous Song", { id: 'prev-song' });
+          toast.success(tr('Previous Song'), { id: 'prev-song' });
           break;
         case 'r': // Loop (Repeat)
           e.preventDefault();
@@ -2407,7 +2632,7 @@ function App() {
           // We calculate the next mode based on current state to show correct toast
           const nextRepMode = repeatMode === 'off' ? 'one' : repeatMode === 'one' ? 'all' : repeatMode === 'all' ? 'all_repeat' : 'off';
           const repLabels: Record<string, string> = { off: 'Repeat Off', one: 'Loop One', all: 'Play All (Stop)', all_repeat: 'Loop Playlist' };
-          toast.success(`Repeat: ${repLabels[nextRepMode]}`, { id: 'repeat' });
+          toast.success(`${tr('Repeat')}: ${tr(repLabels[nextRepMode])}`, { id: 'repeat' });
           break;
         case 'p': // List (Playlist)
           e.preventDefault();
@@ -2435,7 +2660,7 @@ function App() {
 
           setRenderConfig(prev => ({ ...prev, lyricDisplayMode: nextMode }));
           // setPresetCustom(); // Disabled to allow customized base presets
-          toast.success(`Lyric Mode: ${nextMode.replace('-', ' ')}`, { id: 'lyric-mode' });
+          toast.success(`${tr('Lyric Mode')}: ${nextMode.replace('-', ' ')}`, { id: 'lyric-mode' });
           break;
         case 'c': // Cycle Text Case
           e.preventDefault();
@@ -2447,7 +2672,7 @@ function App() {
 
           setRenderConfig(prev => ({ ...prev, textCase: nextCase }));
           // setPresetCustom(); // Disabled to allow customized base presets
-          toast.success(`Text Case: ${nextCase}`, { id: 'text-case' });
+          toast.success(`${tr('Text Case')}: ${nextCase}`, { id: 'text-case' });
           break;
         case 'f':
           toggleFullscreen();
@@ -2464,7 +2689,7 @@ function App() {
             const newRandomConfig = generateRandomRenderConfig(renderConfigRef.current);
             setRenderConfig(newRandomConfig);
             setPreset('custom');
-            toast.success('🎲 Random settings generated!', { id: 'random-settings' });
+            toast.success(tr('🎲 Random settings generated!'), { id: 'random-settings' });
           }
           break;
         case 'd': // Toggle Render Settings
@@ -2493,7 +2718,7 @@ function App() {
             highlightEffect: prev.highlightEffect === 'none' ? 'karaoke' : 'none'
           }));
           // setPresetCustom(); // Disabled as per user request
-          toast.success(`Highlight: ${isTurningOn ? 'On (Karaoke)' : 'Off'}`, { id: 'highlight-toggle' });
+          toast.success(`${tr('Highlight')}: ${tr(isTurningOn ? 'On' : 'Off')}`, { id: 'highlight-toggle' });
           break;
         case 'z': // Cycle Highlight Effect
           e.preventDefault();
@@ -2521,7 +2746,7 @@ function App() {
           });
           // setPresetCustom(); // Disabled as per user request
 
-          toast.success(`Effect: ${nextEffectZ.replace(/-/g, ' ')}`, { id: 'highlight-effect' });
+          toast.success(`${tr('Effect')}: ${nextEffectZ.replace(/-/g, ' ')}`, { id: 'highlight-effect' });
           break;
         case 'j': // Cycle Preset
           e.preventDefault();
@@ -2581,7 +2806,7 @@ function App() {
               break;
             }
           }
-          toast.success(`Preset: ${pLabel}`, { id: 'preset' });
+          toast.success(`${tr('Preset')}: ${pLabel}`, { id: 'preset' });
           break;
         case 'arrowleft':
           e.preventDefault();
@@ -2618,7 +2843,7 @@ function App() {
           const currentScaleUp = renderConfigRef.current.fontSizeScale;
           const newValUp = Math.min(currentScaleUp + 0.1, 3.0);
           setRenderConfig(prev => ({ ...prev, fontSizeScale: newValUp }));
-          toast.success(`Font Size: ${(newValUp * 100).toFixed(0)}%`, { id: 'font-size' });
+          toast.success(`${tr('Font Size')}: ${(newValUp * 100).toFixed(0)}%`, { id: 'font-size' });
           // setPresetCustom(); // Disabled to allow customized base presets
           break;
         case '-':
@@ -2627,7 +2852,7 @@ function App() {
           const currentScaleDown = renderConfigRef.current.fontSizeScale;
           const newValDown = Math.max(currentScaleDown - 0.1, 0.1);
           setRenderConfig(prev => ({ ...prev, fontSizeScale: newValDown }));
-          toast.success(`Font Size: ${(newValDown * 100).toFixed(0)}%`, { id: 'font-size' });
+          toast.success(`${tr('Font Size')}: ${(newValDown * 100).toFixed(0)}%`, { id: 'font-size' });
           // setPresetCustom(); // Disabled to allow customized base presets
           break;
         case 'e':
@@ -2656,7 +2881,7 @@ function App() {
           e.preventDefault();
           setUiScale(prev => {
             const next = Math.max(0.5, Math.round((prev - 0.05) * 100) / 100);
-            toast.success(`UI Scale: ${Math.round(next * 100)}%`, { id: 'ui-scale' });
+            toast.success(`${tr('UI Scale')}: ${Math.round(next * 100)}%`, { id: 'ui-scale' });
             return next;
           });
           break;
@@ -2665,7 +2890,7 @@ function App() {
           e.preventDefault();
           setUiScale(prev => {
             const next = Math.min(2.0, Math.round((prev + 0.05) * 100) / 100);
-            toast.success(`UI Scale: ${Math.round(next * 100)}%`, { id: 'ui-scale' });
+            toast.success(`${tr('UI Scale')}: ${Math.round(next * 100)}%`, { id: 'ui-scale' });
             return next;
           });
           break;
@@ -2673,13 +2898,13 @@ function App() {
           if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) break;
           e.preventDefault();
           setUiScale(1.0);
-          toast.success("UI Scale: 100%", { id: 'ui-scale' });
+          toast.success(`${tr('UI Scale')}: 100%`, { id: 'ui-scale' });
           break;
         case 'q': // Toggle Lyric Visibility Mode (Default / Auto)
           e.preventDefault();
           setRenderConfig(prev => {
             const next = (prev.lyricVisibilityMode ?? 'default') === 'auto' ? 'default' : 'auto';
-            toast.success(`Lyric Visibility: ${next === 'auto' ? 'Auto' : 'Default'}`, { id: 'lyric-visibility-mode' });
+            toast.success(`${tr('Lyric Visibility')}: ${tr(next === 'auto' ? 'Auto' : 'Default')}`, { id: 'lyric-visibility-mode' });
             return { ...prev, lyricVisibilityMode: next };
           });
           break;
@@ -2861,89 +3086,100 @@ function App() {
       {/* Drag and Drop Overlay */}
       {isDragging && (
         <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-8 transition-all duration-300 pointer-events-none">
-          <div className="border-2 border-dashed border-purple-500/50 bg-zinc-950/40 backdrop-blur-xl rounded-3xl p-10 max-w-2xl w-full flex flex-col items-center text-center space-y-8 animate-pulse shadow-[0_0_50px_rgba(168,85,247,0.15)] pointer-events-none">
-            <div className="p-5 bg-purple-500/10 rounded-full text-purple-400 ring-4 ring-purple-500/5 animate-bounce">
+          <div className="border-2 border-dashed border-amber-500/50 bg-zinc-950/40 backdrop-blur-xl rounded-3xl p-10 max-w-2xl w-full flex flex-col items-center text-center space-y-8 animate-pulse shadow-[0_0_50px_rgba(168,85,247,0.15)] pointer-events-none">
+            <div className="p-5 bg-amber-500/10 rounded-full text-amber-400 ring-4 ring-amber-500/5 animate-bounce">
               <Upload size={48} />
             </div>
             
             <div className="space-y-3">
-              <h2 className="text-3xl font-extrabold text-white tracking-tight">Drop files to load</h2>
-              <p className="text-zinc-400 max-w-md text-sm leading-relaxed">
-                Release your files anywhere to instantly import them into the player and maker workspace.
-              </p>
+              <h2 className="text-3xl font-extrabold text-white tracking-tight">{tr('Drop files to load')}</h2>
+              <p className="text-zinc-400 max-w-md text-sm leading-relaxed">{tr('Release your files anywhere to instantly import them into the player and maker workspace.')}</p>
             </div>
 
             <div className="grid grid-cols-3 gap-6 w-full pt-4 border-t border-white/5">
               <div className="flex flex-col items-center space-y-2 p-4 bg-white/5 rounded-2xl border border-white/5">
-                <div className="text-purple-400 bg-purple-500/10 p-3 rounded-xl">
+                <div className="text-amber-400 bg-amber-500/10 p-3 rounded-xl">
                   <Music size={24} />
                 </div>
-                <span className="text-xs font-bold text-zinc-200">Audio / Video</span>
-                <span className="text-[10px] text-zinc-500">MP3, WAV, FLAC, MP4...</span>
+                <span className="text-xs font-bold text-zinc-200">{tr('Audio / Video')}</span>
+                <span className="text-[10px] text-zinc-500">{tr('MP3, WAV, FLAC, MP4...')}</span>
               </div>
 
               <div className="flex flex-col items-center space-y-2 p-4 bg-white/5 rounded-2xl border border-white/5">
                 <div className="text-emerald-400 bg-emerald-500/10 p-3 rounded-xl">
                   <FileText size={24} />
                 </div>
-                <span className="text-xs font-bold text-zinc-200">Lyrics / Subtitles</span>
-                <span className="text-[10px] text-zinc-500">LRC, SRT, VTT, TTML...</span>
+                <span className="text-xs font-bold text-zinc-200">{tr('Lyrics / Subtitles')}</span>
+                <span className="text-[10px] text-zinc-500">{tr('LRC, SRT, VTT, TTML...')}</span>
               </div>
 
               <div className="flex flex-col items-center space-y-2 p-4 bg-white/5 rounded-2xl border border-white/5">
                 <div className="text-pink-400 bg-pink-500/10 p-3 rounded-xl">
                   <Type size={24} />
                 </div>
-                <span className="text-xs font-bold text-zinc-200">Custom Font</span>
-                <span className="text-[10px] text-zinc-500">TTF, OTF, WOFF, WOFF2...</span>
+                <span className="text-xs font-bold text-zinc-200">{tr('Custom Font')}</span>
+                <span className="text-[10px] text-zinc-500">{tr('TTF, OTF, WOFF, WOFF2...')}</span>
               </div>
             </div>
           </div>
         </div>
       )}
-      <audio
-        key={audioElementKey}
-        ref={audioRef}
-        src={audioSrc || undefined}
-        loop={repeatMode === 'one'}
-        muted={isMuted}
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleLoadedMetadata}
-        onEnded={() => {
-          if (isRendering) return;
+      {/* 悬浮视频小窗：左侧边缘垂直居中。
+          播放器本体就是这个 <video>，音画天然同步；纯音频文件时窗口内显示音符占位。 */}
+      <FloatingVideoWindow
+        aspect={videoAspect}
+        title={displayTitle}
+        visible={videoWindowVisible && !isRendering}
+        onVisibleChange={setVideoWindowVisible}
+        uiScale={uiScale}
+        disabled={isRendering}
+      >
+        <video
+          key={audioElementKey}
+          ref={audioRef}
+          src={audioSrc || undefined}
+          loop={repeatMode === 'one'}
+          muted={isMuted}
+          playsInline
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleLoadedMetadata}
+          onEnded={() => {
+            if (isRendering) return;
 
-          // Global Queue Handling (Active regardless of Playist UI visibility)
-          const hasQueue = playlist.length > 0;
+            // Global Queue Handling (Active regardless of Playist UI visibility)
+            const hasQueue = playlist.length > 0;
 
-          if (repeatMode === 'one') {
-            // Handled by loop attribute, but purely for backup:
-            // if (!audioRef.current?.loop) audioRef.current?.play();
-          } else if (repeatMode === 'all_repeat') {
-            // Loop All: Always go next (loops around)
-            if (hasQueue) {
-              playNextSong();
-            } else {
-              // Single file loop equivalent
-              audioRef.current?.play();
-            }
-          } else if (repeatMode === 'all') {
-            // Play All (No Repeat): Stop at end
-            if (hasQueue) {
-              if (currentTrackIndex < playlist.length - 1) {
+            if (repeatMode === 'one') {
+              // Handled by loop attribute, but purely for backup:
+              // if (!audioRef.current?.loop) audioRef.current?.play();
+            } else if (repeatMode === 'all_repeat') {
+              // Loop All: Always go next (loops around)
+              if (hasQueue) {
                 playNextSong();
+              } else {
+                // Single file loop equivalent
+                audioRef.current?.play();
+              }
+            } else if (repeatMode === 'all') {
+              // Play All (No Repeat): Stop at end
+              if (hasQueue) {
+                if (currentTrackIndex < playlist.length - 1) {
+                  playNextSong();
+                } else {
+                  setIsPlaying(false);
+                }
               } else {
                 setIsPlaying(false);
               }
             } else {
+              // Off: Stop
               setIsPlaying(false);
             }
-          } else {
-            // Off: Stop
-            setIsPlaying(false);
-          }
-        }}
-        crossOrigin="anonymous"
-      />
+          }}
+          crossOrigin="anonymous"
+          className="w-full h-full object-contain bg-black"
+        />
+      </FloatingVideoWindow>
 
       {/* Audio Preview Elements */}
       {activeAudioSlides.map(s => (
@@ -3047,7 +3283,7 @@ function App() {
 
         {/* Default Gradient if nothing */}
         {!metadata.coverUrl && ((renderConfig.backgroundSource === 'timeline' && visualSlides.length === 0) || renderConfig.backgroundSource === 'custom') && (
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-900 via-purple-900 to-black opacity-80"></div>
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-900 via-amber-900 to-black opacity-80"></div>
         )}
 
         {/* ThreeJS Background */}
@@ -3166,7 +3402,7 @@ function App() {
       </div>
 
       {/* --- Main Content Area --- */}
-      <div className="relative z-10 flex-1 flex flex-col transition-all duration-500 min-w-0">
+      <div className="relative z-10 flex-1 min-h-0 flex flex-col transition-all duration-500 min-w-0">
 
         {/* Preview Zone Wrapper: constrains absolute overlays (Channel Info, Floating Notes, Song Info) to the preview area only */}
         <div className="relative flex-1 min-h-0 overflow-hidden flex flex-col">
@@ -3419,7 +3655,7 @@ function App() {
                     fontWeight: renderConfig.infoFontWeight || 'bold',
                     fontStyle: renderConfig.infoFontStyle || 'normal'
                   }}
-                >{metadata.title}</h1>
+                >{displayTitle}</h1>
 
                 {/* Artist */}
                 <div className={`flex items-center gap-2 transition-opacity duration-300 
@@ -3434,7 +3670,7 @@ function App() {
                       fontWeight: renderConfig.infoFontWeight || 'bold',
                       fontStyle: renderConfig.infoFontStyle || 'normal'
                     }}
-                  >{metadata.artist}</p>
+                  >{displayArtist}</p>
 
                 </div>
               </div>
@@ -3465,9 +3701,9 @@ function App() {
                   </label>
                 </div>
                 <div>
-                  <h1 className={`text-xl font-bold text-white drop-shadow-md line-clamp-1 transition-opacity duration-300 ${!renderConfig.showTitle ? 'opacity-0' : 'opacity-100'}`}>{metadata.title}</h1>
+                  <h1 className={`text-xl font-bold text-white drop-shadow-md line-clamp-1 transition-opacity duration-300 ${!renderConfig.showTitle ? 'opacity-0' : 'opacity-100'}`}>{displayTitle}</h1>
                   <div className={`flex items-center gap-2 transition-opacity duration-300 ${!renderConfig.showArtist ? 'opacity-0' : 'opacity-100'}`}>
-                    <p className="text-zinc-300 text-sm drop-shadow-md">{metadata.artist}</p>
+                    <p className="text-zinc-300 text-sm drop-shadow-md">{displayArtist}</p>
                   </div>
                 </div>
               </div>
@@ -3507,38 +3743,45 @@ function App() {
               </a>
               <button
                 onClick={() => setBypassAutoHide(!bypassAutoHide)}
-                className={`p-2 rounded-full transition-colors ${bypassAutoHide ? 'bg-purple-600/50 text-white' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
-                title="Bypass Auto-hide (H)"
+                className={`p-2 rounded-full transition-colors ${bypassAutoHide ? 'bg-amber-500/60 text-black' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
+                title={tr('Bypass Auto-hide (H)')}
               >
                 {bypassAutoHide ? <Eye size={20} /> : <EyeOff size={20} />}
+              </button>
+              <button
+                onClick={() => setLang(l => (l === 'zh' ? 'en' : 'zh'))}
+                className="h-9 px-2.5 rounded-full transition-colors bg-black/30 text-zinc-300 hover:bg-white/10 text-xs font-bold flex items-center justify-center min-w-[38px]"
+                title={tr('Switch Language')}
+              >
+                {lang === 'zh' ? '中文' : 'EN'}
               </button>
               <div className="flex items-center gap-1 bg-black/30 text-zinc-300 rounded-full px-2 py-1 text-xs font-bold border border-white/5 h-9">
                 <button
                   onClick={() => setUiScale(prev => Math.max(0.5, Math.round((prev - 0.05) * 100) / 100))}
                   className="w-5 h-5 rounded-full hover:bg-white/10 hover:text-white transition-colors flex items-center justify-center font-bold text-sm"
-                  title="Decrease UI Scale (8)"
+                  title={tr('Decrease UI Scale (8)')}
                 >
                   -
                 </button>
                 <button
                   onClick={() => setUiScale(1.0)}
                   className="px-1 font-bold text-[10px] hover:text-white select-none transition-colors text-center min-w-[28px]"
-                  title="Reset UI Scale to 100% (Click)"
+                  title={tr('Reset UI Scale to 100% (Click)')}
                 >
                   {Math.round(uiScale * 100)}%
                 </button>
                 <button
                   onClick={() => setUiScale(prev => Math.min(2.0, Math.round((prev + 0.05) * 100) / 100))}
                   className="w-5 h-5 rounded-full hover:bg-white/10 hover:text-white transition-colors flex items-center justify-center font-bold text-sm"
-                  title="Increase UI Scale (9)"
+                  title={tr('Increase UI Scale (9)')}
                 >
                   +
                 </button>
               </div>
               <button
                 onClick={() => setIsMinimalMode(!isMinimalMode)}
-                className={`p-2 rounded-full transition-colors ${isMinimalMode ? 'bg-purple-600 text-white' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
-                title="Minimal Mode (O)"
+                className={`p-2 rounded-full transition-colors ${isMinimalMode ? 'bg-amber-500 text-black' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
+                title={tr('Minimal Mode (O)')}
               >
                 {isMinimalMode ? <Maximize size={20} /> : <Minimize size={20} />}
               </button>
@@ -3549,7 +3792,7 @@ function App() {
                   if (newMode) setActiveTab(TabView.PLAYER);
                 }}
                 className={`p-2 rounded-full transition-colors ${isPlaylistMode ? 'bg-orange-600 text-white' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
-                title="Toggle Playlist (L)"
+                title={tr('Toggle Playlist (L)')}
               >
                 <ListMusic size={20} />
               </button>
@@ -3558,8 +3801,8 @@ function App() {
                   if (isPlaylistMode) setIsPlaylistMode(false);
                   setActiveTab(activeTab === TabView.PLAYER ? TabView.EDITOR : TabView.PLAYER);
                 }}
-                className={`p-2 rounded-full transition-colors ${activeTab === TabView.EDITOR && !isPlaylistMode ? 'bg-purple-600 text-white' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
-                title="Toggle Timeline (T)"
+                className={`p-2 rounded-full transition-colors ${activeTab === TabView.EDITOR && !isPlaylistMode ? 'bg-amber-500 text-black' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
+                title={tr('Toggle Timeline (T)')}
               >
                 <Film size={20} />
               </button>
@@ -3568,8 +3811,8 @@ function App() {
                   e.stopPropagation();
                   setShowRenderSettings(!showRenderSettings);
                 }}
-                className={`p-2 rounded-full transition-colors ${showRenderSettings ? 'bg-purple-600 text-white' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
-                title="Render Settings (D)"
+                className={`p-2 rounded-full transition-colors ${showRenderSettings ? 'bg-amber-500 text-black' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
+                title={tr('Render Settings (D)')}
               >
                 <Settings size={20} />
               </button>
@@ -3578,15 +3821,15 @@ function App() {
                   e.stopPropagation();
                   setShowShortcutInfo(!showShortcutInfo);
                 }}
-                className={`p-2 rounded-full transition-colors ${showShortcutInfo ? 'bg-purple-600 text-white' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
-                title="Keyboard Shortcuts (Y)"
+                className={`p-2 rounded-full transition-colors ${showShortcutInfo ? 'bg-amber-500 text-black' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
+                title={tr('Keyboard Shortcuts (Y)')}
               >
                 <Keyboard size={20} />
               </button>
               <button
                 onClick={toggleFullscreen}
                 className="p-2 rounded-full bg-black/30 text-zinc-300 hover:bg-white/10 transition-colors"
-                title="Fullscreen (F)"
+                title={tr('Fullscreen (F)')}
               >
                 {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
               </button>
@@ -3595,8 +3838,10 @@ function App() {
         </div>
 
         {/* Center Stage: Lyrics */}
+        {/* min-h-0 必须保留：播客/视频字幕动辄几百行，若不限制 flex 项的最小高度，
+            字幕区会撑破容器并把底部控制条挤出视口。 */}
         <div
-          className={`flex-1 flex justify-center overflow-hidden relative ${renderConfig.contentPosition === 'top' ? 'items-start' : renderConfig.contentPosition === 'bottom' ? 'items-end' : 'items-center'}`}
+          className={`flex-1 min-h-0 flex justify-center overflow-hidden relative ${renderConfig.contentPosition === 'top' ? 'items-start' : renderConfig.contentPosition === 'bottom' ? 'items-end' : 'items-center'}`}
           style={{
             paddingTop: renderConfig.contentPosition === 'top' ? `${(renderConfig.marginTopScale ?? 1.0) * 10}vh` : undefined,
             paddingBottom: renderConfig.contentPosition === 'bottom' ? `${(renderConfig.marginBottomScale ?? 1.0) * 10}vh` : undefined,
@@ -4418,15 +4663,23 @@ function App() {
                   }
                 }
 
+                const isAnchorLine = anchorLineIndices.has(idx);
+                const isSnapPreviewLine = snapPreview?.lineIndex === idx;
+
                 return (
                   <p
                     key={idx}
                     data-lyric-active={isActive ? "true" : "false"}
-                    className={`${containerClass} ${isActive ? activeClass : inactiveClass}`}
+                    className={`${syncMode ? containerClass.replace('cursor-pointer', 'cursor-crosshair') : containerClass}${isActive ? activeClass : inactiveClass}${isAnchorLine ? ' ring-2 ring-amber-400/70 bg-amber-400/10 rounded-lg' : isSnapPreviewLine ? ' ring-1 ring-amber-300/40 rounded-lg' : ''}`}
                     onClick={() => {
+                      // 对齐模式下，点选一行 = 把它吸附到最近的强起音点
+                      if (syncMode) {
+                        void handleAnchorClick(idx);
+                        return;
+                      }
                       if (isActive) {
                         navigator.clipboard.writeText(line.text);
-                        toast.success('Lyric copied to clipboard', 1500);
+                        toast.success(tr('Lyric copied to clipboard'), 1500);
                       }
                       if (audioRef.current && !isRendering) {
                         audioRef.current.currentTime = line.time;
@@ -4450,8 +4703,8 @@ function App() {
               {!activeSlide && !audioSrc && playlist.length === 0 && preset !== 'none' && (
                 <div className="flex flex-col items-center gap-4 animate-pulse">
                   <Music size={64} className="opacity-20" />
-                  <p>Drag & drop files or load audio & lyrics to start</p>
-                  <p className="text-xs opacity-50">Shortcuts: 1 (Load Audio/Video), 2 (Load Lyrics), 3 (Load Font), Space (Play), S / V (Stop)</p>
+                  <p>{tr('Drag & drop files or load audio & lyrics to start')}</p>
+                  <p className="text-xs opacity-50">{tr('Shortcuts: 1 (Load Audio/Video), 2 (Load Lyrics), 3 (Load Font), Space (Play), S / V (Stop)')}</p>
                 </div>
               )}
             </div>
@@ -4459,7 +4712,8 @@ function App() {
         </div>
 
         {/* Bottom Controls (Player) */}
-        <div className={`no-minimal-mode-toggle transition-all duration-500 ease-in-out overflow-hidden ${isFooterVisible ? 'max-h-60 opacity-100 translate-y-0' : 'max-h-0 opacity-0 translate-y-4'}`}>
+        {/* 对齐面板展开时需要更高的上限，否则面板会被 overflow-hidden 裁掉 */}
+        <div className={`no-minimal-mode-toggle transition-all duration-500 ease-in-out overflow-hidden ${isFooterVisible ? (syncMode ? 'max-h-[40rem]' : 'max-h-60') + ' opacity-100 translate-y-0' : 'max-h-0 opacity-0 translate-y-4'}`}>
           <div className="bg-gradient-to-t from-black/60 via-black/30 to-transparent p-4 pb-6 lg:p-6 lg:pb-8">
             <div className="max-w-7xl mx-auto space-y-4">
               {/* Progress Bar */}
@@ -4479,14 +4733,14 @@ function App() {
                   }}
                 >
                   <div
-                    className="absolute top-0 left-0 h-full bg-purple-500 rounded-full pointer-events-none"
+                    className="absolute top-0 left-0 h-full bg-amber-500 rounded-full pointer-events-none"
                     style={{ width: `${(currentTime / duration) * 100}%` }}
                   ></div>
                   <input
                     type="range"
                     name="progress"
                     id="progress-bar"
-                    aria-label="Seek Progress"
+                    aria-label={tr('Seek Progress')}
                     min="0"
                     max={duration || 0}
                     value={currentTime}
@@ -4516,14 +4770,14 @@ function App() {
                     }}
                   >
                     <div
-                      className="absolute top-0 left-0 h-full bg-zinc-300 group-hover/vol:bg-purple-400 transition-colors pointer-events-none"
+                      className="absolute top-0 left-0 h-full bg-zinc-300 group-hover/vol:bg-amber-400 transition-colors pointer-events-none"
                       style={{ width: `${isMuted ? 0 : volume * 100}%` }}
                     ></div>
                     <input
                       type="range"
                       name="volume"
                       id="volume-control"
-                      aria-label="Volume Control"
+                      aria-label={tr('Volume Control')}
                       min="0"
                       max="1"
                       step="0.05"
@@ -4535,15 +4789,109 @@ function App() {
                 </div>
               </div>
 
+              {/* 字幕对齐面板 */}
+              {syncMode && (
+                <div className="rounded-2xl border border-amber-400/25 bg-gradient-to-b from-amber-500/[0.07] to-transparent p-3 lg:p-4 space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2 text-amber-300">
+                      <Crosshair size={16} />
+                      <span className="text-sm font-bold">字幕对齐</span>
+                    </div>
+
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full ${syncAnalyzing ? 'bg-amber-500/15 text-amber-300 animate-pulse' : syncEnvelope ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-700/50 text-zinc-400'}`}>
+                      {syncAnalyzing ? '正在分析音频…' : syncEnvelope ? '分析就绪' : '待分析'}
+                    </span>
+
+                    <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+                      <span>搜索窗口</span>
+                      <select
+                        value={syncWindow}
+                        onChange={e => setSyncWindow(parseFloat(e.target.value))}
+                        className="bg-zinc-800 border border-white/10 rounded px-1.5 py-0.5 text-[11px] text-zinc-200 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      >
+                        <option value={0.5}>±0.5s</option>
+                        <option value={1}>±1.0s</option>
+                        <option value={2}>±2.0s</option>
+                        <option value={3}>±3.0s</option>
+                        <option value={5}>±5.0s</option>
+                      </select>
+                    </div>
+
+                    <span className="text-[11px] text-zinc-400">
+                      锚点 <span className="text-amber-300 font-mono">{syncAnchors.length}</span>/2
+                      {syncAnchors.length === 2 && (
+                        <span className="ml-1 text-zinc-500">
+                          {Math.abs(syncAnchors[0].offset - syncAnchors[1].offset) < 0.1 ? '（纯平移）' : '（线性插值）'}
+                        </span>
+                      )}
+                    </span>
+
+                    <div className="flex-1" />
+
+                    <button
+                      onClick={() => setAwaitingSecondAnchor(true)}
+                      disabled={syncAnchors.length === 0 || syncAnalyzing}
+                      className="px-2.5 py-1 rounded-lg text-[11px] bg-white/5 hover:bg-white/10 text-zinc-200 border border-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      再加锚点
+                    </button>
+                    <button
+                      onClick={applySyncOffsets}
+                      disabled={!syncOffsets || syncAnchors.length === 0}
+                      className="px-2.5 py-1 rounded-lg text-[11px] bg-amber-500 hover:bg-amber-400 text-black font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      应用
+                    </button>
+                    <button
+                      onClick={resetSync}
+                      disabled={syncAnchors.length === 0}
+                      className="px-2.5 py-1 rounded-lg text-[11px] bg-white/5 hover:bg-white/10 text-zinc-200 border border-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      撤销
+                    </button>
+                    <button
+                      onClick={() => setSyncMode(false)}
+                      className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                      title="退出对齐模式"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-zinc-500 leading-relaxed">
+                    {awaitingSecondAnchor && syncAnchors.length === 1
+                      ? '请在文件后段再点选一行字幕作为第二个锚点，用于修正「越往后越偏」的漂移。'
+                      : syncAnchors.length === 0
+                        ? '点选任意一行字幕，它会被吸附到该行时间附近最强的起音点，并据此整体平移时间轴。'
+                        : '预览已生效（琥珀色描边为锚定行）。确认无误后点「应用」写回字幕；不满意可「撤销」。'}
+                  </p>
+
+                  {snapPreview && (
+                    <div className="text-[11px] text-amber-200/90 font-mono">
+                      第 {snapPreview.lineIndex + 1} 行 → 位移 {snapPreview.delta >= 0 ? '+' : ''}{snapPreview.delta.toFixed(3)}s
+                      <span className="text-zinc-500 ml-2">峰强度 {(snapPreview.strength * 100).toFixed(0)}%</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Main Buttons */}
               <div className="flex flex-wrap lg:grid lg:grid-cols-[1fr_auto_1fr] items-center justify-center gap-4">
                 <div className="flex gap-1 justify-center lg:justify-start flex-wrap order-2 lg:order-none w-auto lg:w-full">
-                  <label className="p-2 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white cursor-pointer transition-colors" title="Load Audio or video (1)">
+                  <label className="p-2 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white cursor-pointer transition-colors" title="载入音频或视频 (1)">
                     <Music size={18} />
                     <input type="file" name="audio-file" id="audio-file" accept="audio/*,video/*" className="hidden" onChange={handleAudioUpload} disabled={isRendering} />
                   </label>
+                  <button
+                    onClick={() => setVideoWindowVisible(v => !v)}
+                    className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${videoWindowVisible ? 'text-amber-400' : 'text-zinc-400 hover:text-white'}`}
+                    title={videoWindowVisible ? '隐藏悬浮视频小窗' : '显示悬浮视频小窗'}
+                    disabled={isRendering}
+                  >
+                    {videoWindowVisible ? <Video size={18} /> : <EyeOff size={18} />}
+                  </button>
                   <div className="flex items-center gap-1">
-                    <label className={`p-2 rounded-lg hover:bg-white/10 cursor-pointer transition-colors ${lyrics.length > 0 ? 'text-purple-400' : 'text-zinc-400 hover:text-white'}`} title="Load Lyrics (.lrc, .srt, .vtt, .ttml) (2)">
+                    <label className={`p-2 rounded-lg hover:bg-white/10 cursor-pointer transition-colors ${lyrics.length > 0 ? 'text-amber-400' : 'text-zinc-400 hover:text-white'}`} title={tr('Load Lyrics (.lrc, .srt, .vtt, .ttml) (2)')}>
                       <FileText size={18} />
                       <input type="file" name="lyrics-file" id="lyrics-file" accept=".lrc,.srt,.ttml,.xml,.vtt" className="hidden" onChange={handleLyricsUpload} disabled={isRendering} />
                     </label>
@@ -4551,7 +4899,7 @@ function App() {
                       <button
                         onClick={() => setLyrics([])}
                         className="p-1 rounded-full text-zinc-500 hover:text-red-400 hover:bg-white/5 transition-colors"
-                        title="Clear Lyrics"
+                        title={tr('Clear Lyrics')}
                         disabled={isRendering}
                       >
                         <X size={14} />
@@ -4568,7 +4916,7 @@ function App() {
                       <button
                         onClick={() => setLyricOffset(prev => parseFloat((prev + 0.1).toFixed(1)))}
                         className="text-zinc-400 hover:text-white flex items-center justify-center h-3.5 w-4 hover:bg-white/10 rounded-sm transition-colors"
-                        title="Increase Lyric Offset (+0.1s)"
+                        title={tr('Increase Lyric Offset (+0.1s)')}
                         disabled={isRendering}
                       >
                         <ChevronUp size={12} />
@@ -4576,7 +4924,7 @@ function App() {
                       <button
                         onClick={() => setLyricOffset(prev => parseFloat((prev - 0.1).toFixed(1)))}
                         className="text-zinc-400 hover:text-white flex items-center justify-center h-3.5 w-4 hover:bg-white/10 rounded-sm transition-colors"
-                        title="Decrease Lyric Offset (-0.1s)"
+                        title={tr('Decrease Lyric Offset (-0.1s)')}
                         disabled={isRendering}
                       >
                         <ChevronDown size={12} />
@@ -4584,8 +4932,18 @@ function App() {
                     </div>
                   </div>
 
+                  {/* 字幕对齐（频谱吸附） */}
+                  <button
+                    onClick={handleToggleSyncMode}
+                    className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${syncMode ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-400 hover:text-white'} disabled:opacity-30 disabled:cursor-not-allowed`}
+                    title={syncMode ? '退出字幕对齐' : '字幕对齐：点选一行，吸附到最近的强起音点'}
+                    disabled={isRendering || lyrics.length === 0 || !audioSrc}
+                  >
+                    {syncAnalyzing ? <Loader2 size={18} className="animate-spin" /> : <Crosshair size={18} />}
+                  </button>
+
                   <div className="flex items-center gap-1">
-                    <label className={`p-2 rounded-lg hover:bg-white/10 cursor-pointer transition-colors ${customFontName ? 'text-purple-400' : 'text-zinc-400 hover:text-white'}`} title={customFontName ? `Custom Font: ${customFontName}` : "Load Custom Font (.ttf, .otf, .woff) (3)"}>
+                    <label className={`p-2 rounded-lg hover:bg-white/10 cursor-pointer transition-colors ${customFontName ? 'text-amber-400' : 'text-zinc-400 hover:text-white'}`} title={customFontName ? `${tr('Custom Font')}：${customFontName}` : tr('Load Custom Font (.ttf, .otf, .woff) (3)')}>
                       <Type size={18} />
                       <input type="file" name="font-file" id="font-file" accept=".ttf,.otf,.woff,.woff2" className="hidden" onChange={handleFontUpload} disabled={isRendering} />
                     </label>
@@ -4593,7 +4951,7 @@ function App() {
                       <button
                         onClick={() => setCustomFontName(null)}
                         className="p-1 rounded-full text-zinc-500 hover:text-red-400 hover:bg-white/5 transition-colors"
-                        title="Reset Default Font"
+                        title={tr('Reset Default Font')}
                         disabled={isRendering}
                       >
                         <X size={14} />
@@ -4610,7 +4968,7 @@ function App() {
                       <button
                         onClick={() => setRenderConfig(prev => ({ ...prev, fontSizeScale: Math.min(prev.fontSizeScale + 0.1, 3.0) }))}
                         className="text-zinc-400 hover:text-white flex items-center justify-center h-3.5 w-4 hover:bg-white/10 rounded-sm transition-colors"
-                        title="Increase Font Size"
+                        title={tr('Increase Font Size')}
                         disabled={isRendering}
                       >
                         <ChevronUp size={12} />
@@ -4618,7 +4976,7 @@ function App() {
                       <button
                         onClick={() => setRenderConfig(prev => ({ ...prev, fontSizeScale: Math.max(prev.fontSizeScale - 0.1, 0.1) }))}
                         className="text-zinc-400 hover:text-white flex items-center justify-center h-3.5 w-4 hover:bg-white/10 rounded-sm transition-colors"
-                        title="Decrease Font Size"
+                        title={tr('Decrease Font Size')}
                         disabled={isRendering}
                       >
                         <ChevronDown size={12} />
@@ -4664,34 +5022,34 @@ function App() {
                           }));
                         }
                       }}
-                      className="appearance-none bg-zinc-800/50 border border-white/5 text-zinc-300 text-xs rounded-lg px-3 pr-8 h-9 w-24 focus:outline-none focus:border-purple-500 cursor-pointer"
+                      className="appearance-none bg-zinc-800/50 border border-white/5 text-zinc-300 text-xs rounded-lg px-3 pr-8 h-9 w-24 focus:outline-none focus:border-amber-500 cursor-pointer"
                       disabled={isRendering}
-                      title="Select Visual Preset"
+                      title={tr('Select Visual Preset')}
                       name="preset"
                       id="preset-select"
-                      aria-label="Visual Preset"
+                      aria-label={tr('Visual Preset')}
                     >
-                      <option value="custom" className="bg-zinc-900 font-bold text-purple-400">Custom ✨</option>
-                      <option value="default" className="bg-zinc-900">Default</option>
-                      <option value="large" className="bg-zinc-900">Big Text</option>
-                      <option value="large_upper" className="bg-zinc-900">Big Text (UP)</option>
-                      <option value="big_center" className="bg-zinc-900">Big Center</option>
-                      <option value="metal" className="bg-zinc-900">Metal</option>
-                      <option value="kids" className="bg-zinc-900">Kids</option>
-                      <option value="sad" className="bg-zinc-900">Sad</option>
-                      <option value="romantic" className="bg-zinc-900">Romantic</option>
-                      <option value="tech" className="bg-zinc-900">Tech</option>
-                      <option value="gothic" className="bg-zinc-900">Gothic</option>
-                      <option value="classic" className="bg-zinc-900">Classic Serif</option>
-                      <option value="monospace" className="bg-zinc-900">Monospace</option>
-                      <option value="testing_up" className="bg-zinc-900">Testing (UP)</option>
-                      <option value="testing" className="bg-zinc-900">Testing</option>
-                      <option value="one_line_up" className="bg-zinc-900">One Line (UP)</option>
-                      <option value="one_line" className="bg-zinc-900">One Line</option>
-                      <option value="slideshow" className="bg-zinc-900">Slideshow</option>
-                      <option value="just_video" className="bg-zinc-900">Just Video</option>
-                      <option value="subtitle" className="bg-zinc-900">Subtitle</option>
-                      <option value="none" className="bg-zinc-900">None</option>
+                      <option value="custom" className="bg-zinc-900 font-bold text-amber-400">{tr('Custom ✨')}</option>
+                      <option value="default" className="bg-zinc-900">{tr('Default')}</option>
+                      <option value="large" className="bg-zinc-900">{tr('Big Text')}</option>
+                      <option value="large_upper" className="bg-zinc-900">{tr('Big Text (UP)')}</option>
+                      <option value="big_center" className="bg-zinc-900">{tr('Big Center')}</option>
+                      <option value="metal" className="bg-zinc-900">{tr('Metal')}</option>
+                      <option value="kids" className="bg-zinc-900">{tr('Kids')}</option>
+                      <option value="sad" className="bg-zinc-900">{tr('Sad')}</option>
+                      <option value="romantic" className="bg-zinc-900">{tr('Romantic')}</option>
+                      <option value="tech" className="bg-zinc-900">{tr('Tech')}</option>
+                      <option value="gothic" className="bg-zinc-900">{tr('Gothic')}</option>
+                      <option value="classic" className="bg-zinc-900">{tr('Classic Serif')}</option>
+                      <option value="monospace" className="bg-zinc-900">{tr('Monospace')}</option>
+                      <option value="testing_up" className="bg-zinc-900">{tr('Testing (UP)')}</option>
+                      <option value="testing" className="bg-zinc-900">{tr('Testing')}</option>
+                      <option value="one_line_up" className="bg-zinc-900">{tr('One Line (UP)')}</option>
+                      <option value="one_line" className="bg-zinc-900">{tr('One Line')}</option>
+                      <option value="slideshow" className="bg-zinc-900">{tr('Slideshow')}</option>
+                      <option value="just_video" className="bg-zinc-900">{tr('Just Video')}</option>
+                      <option value="subtitle" className="bg-zinc-900">{tr('Subtitle')}</option>
+                      <option value="none" className="bg-zinc-900">{tr('None')}</option>
                     </select>
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 text-zinc-500">
                       <svg className="fill-current h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
@@ -4705,34 +5063,35 @@ function App() {
                   <button
                     className="text-zinc-400 hover:text-white transition-colors disabled:opacity-50"
                     onClick={stopPlayback}
-                    title="Stop (S)"
+                    title={tr('Stop (S)')}
                     disabled={isRendering}
                   >
                     <Square size={20} fill="currentColor" />
                   </button>
-                  <button className="text-zinc-400 hover:text-white transition-colors disabled:opacity-50" disabled={isRendering || playlist.length === 0} onClick={playPreviousSong} title="Previous Song">
+                  <button className="text-zinc-400 hover:text-white transition-colors disabled:opacity-50" disabled={isRendering || playlist.length === 0} onClick={playPreviousSong} title={tr('Previous Song')}>
                     <SkipBack size={24} />
                   </button>
-                  <button className="text-zinc-400 hover:text-white transition-colors disabled:opacity-50" disabled={isRendering} onClick={() => audioRef.current && (audioRef.current.currentTime -= 5)} title="Rewind 5s">
+                  <button className="text-zinc-400 hover:text-white transition-colors disabled:opacity-50" disabled={isRendering} onClick={() => audioRef.current && (audioRef.current.currentTime -= 5)} title={tr('Rewind 5s')}>
                     <Rewind size={20} />
                   </button>
                   <button
                     onClick={togglePlay}
                     disabled={isRendering}
-                    className="w-14 h-14 flex items-center justify-center bg-white text-black rounded-full hover:scale-105 transition-transform shadow-lg shadow-purple-500/20 disabled:opacity-50 disabled:hover:scale-100"
+                    title={isPlaying ? '暂停' : '播放'}
+                    className="w-14 h-14 flex items-center justify-center bg-white text-black rounded-full hover:scale-105 transition-transform shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:hover:scale-100"
                   >
                     {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" className="ml-1" />}
                   </button>
-                  <button className="text-zinc-400 hover:text-white transition-colors disabled:opacity-50" disabled={isRendering} onClick={() => audioRef.current && (audioRef.current.currentTime += 5)} title="Fast Forward 5s">
+                  <button className="text-zinc-400 hover:text-white transition-colors disabled:opacity-50" disabled={isRendering} onClick={() => audioRef.current && (audioRef.current.currentTime += 5)} title={tr('Fast Forward 5s')}>
                     <FastForward size={20} />
                   </button>
-                  <button className="text-zinc-400 hover:text-white transition-colors disabled:opacity-50" disabled={isRendering || playlist.length === 0} onClick={playNextSong} title="Next Song">
+                  <button className="text-zinc-400 hover:text-white transition-colors disabled:opacity-50" disabled={isRendering || playlist.length === 0} onClick={playNextSong} title={tr('Next Song')}>
                     <SkipForward size={24} />
                   </button>
                   <button
                     className={`transition-colors disabled:opacity-50 ${repeatMode !== 'off' ? 'text-green-400 hover:text-green-300' : 'text-zinc-400 hover:text-white'}`}
                     onClick={toggleRepeat}
-                    title={`Repeat: ${repeatMode === 'off' ? 'Off' : repeatMode === 'one' ? 'One' : repeatMode === 'all' ? 'Play All (No Repeat)' : 'Loop All'} (R)`}
+                    title={`${tr('Repeat')}: ${tr(repeatMode === 'off' ? 'Off' : repeatMode === 'one' ? 'One' : repeatMode === 'all' ? 'Play All (No Repeat)' : 'Loop All')} (R)`}
                     disabled={isRendering}
                   >
                     {repeatMode === 'one' && <Repeat1 size={20} />}
@@ -4753,8 +5112,8 @@ function App() {
                         ...prev,
                         lyricVisibilityMode: (prev.lyricVisibilityMode ?? 'default') === 'auto' ? 'default' : 'auto',
                       }))}
-                      className={`bg-zinc-800/50 border border-white/5 text-[10px] font-mono rounded-lg px-2 h-9 transition-colors disabled:opacity-30 ${(renderConfig.lyricVisibilityMode ?? 'default') === 'auto' ? 'text-purple-400 border-purple-500/50' : 'text-zinc-300 hover:text-white'}`}
-                      title={`Lyric Visibility: ${(renderConfig.lyricVisibilityMode ?? 'default') === 'auto' ? 'Auto' : 'Default'}`}
+                      className={`bg-zinc-800/50 border border-white/5 text-[10px] font-mono rounded-lg px-2 h-9 transition-colors disabled:opacity-30 ${(renderConfig.lyricVisibilityMode ?? 'default') === 'auto' ? 'text-amber-400 border-amber-500/50' : 'text-zinc-300 hover:text-white'}`}
+                      title={`${tr('Lyric Visibility')}: ${tr((renderConfig.lyricVisibilityMode ?? 'default') === 'auto' ? 'Auto' : 'Default')}`}
                       disabled={isRendering}
                     >
                       {(renderConfig.lyricVisibilityMode ?? 'default') === 'auto' ? 'AUTO' : 'DEFAULT'}
@@ -4762,8 +5121,8 @@ function App() {
                     {/* Background Blur Toggle */}
                     <button
                       onClick={() => setRenderConfig(prev => ({ ...prev, backgroundBlurStrength: prev.backgroundBlurStrength > 0 ? 0 : 12 }))}
-                      className={`bg-zinc-800/50 border border-white/5 text-[10px] font-mono rounded-lg px-2 h-9 transition-colors disabled:opacity-30 ${isBlurEnabled ? 'text-purple-400 border-purple-500/50' : 'text-zinc-300 hover:text-white'}`}
-                      title={`Background Blur: ${isBlurEnabled ? 'On' : 'Off'}`}
+                      className={`bg-zinc-800/50 border border-white/5 text-[10px] font-mono rounded-lg px-2 h-9 transition-colors disabled:opacity-30 ${isBlurEnabled ? 'text-amber-400 border-amber-500/50' : 'text-zinc-300 hover:text-white'}`}
+                      title={`${tr('Background Blur')}: ${tr(isBlurEnabled ? 'On' : 'Off')}`}
                       disabled={isRendering}
                     >
                       {isBlurEnabled ? 'BLUR' : 'SHARP'}
@@ -4772,7 +5131,7 @@ function App() {
                     <button
                       onClick={() => setRenderConfig(prev => ({ ...prev, highlightEffect: prev.highlightEffect === 'none' ? 'karaoke' : 'none' }))}
                       className={`p-2 rounded-full transition-all ${renderConfig.highlightEffect !== 'none' ? 'bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.5)]' : 'hover:bg-zinc-800 text-zinc-400'}`}
-                      title="Toggle Lyric Highlight"
+                      title={tr('Toggle Lyric Highlight')}
                     >
                       <Type size={20} />
                     </button>
@@ -4781,7 +5140,7 @@ function App() {
                     <button
                       onClick={() => setResolution(prev => prev === '1080p' ? '720p' : '1080p')}
                       className="bg-zinc-800/50 border border-white/5 text-[10px] font-mono text-zinc-300 hover:text-white rounded-lg px-2 h-9 transition-colors disabled:opacity-30"
-                      title="Toggle Resolution (720p / 1080p)"
+                      title={tr('Toggle Resolution (720p / 1080p)')}
                       disabled={isRendering}
                     >
                       {resolution}
@@ -4799,7 +5158,7 @@ function App() {
                         return '16:9';
                       })}
                       className="bg-zinc-800/50 border border-white/5 text-[10px] font-mono text-zinc-300 hover:text-white rounded-lg px-2 h-9 transition-colors disabled:opacity-30"
-                      title="Toggle Aspect Ratio (16:9 / 9:16 / 3:4 / 1:1 / 1:2 / 2:1 / 2:3 / 3:2)"
+                      title={tr('Toggle Aspect Ratio (16:9 / 9:16 / 3:4 / 1:1 / 1:2 / 2:1 / 2:3 / 3:2)')}
                       disabled={isRendering}
                     >
                       {aspectRatio}
@@ -4810,16 +5169,16 @@ function App() {
                     <select
                       value={renderEngine}
                       onChange={(e) => setRenderEngine(e.target.value as RenderEngine)}
-                      className="appearance-none bg-zinc-800/50 border border-white/5 text-zinc-300 text-xs rounded-lg px-3 pr-8 w-26 h-9 focus:outline-none focus:border-purple-500 cursor-pointer text-ellipsis overflow-hidden"
+                      className="appearance-none bg-zinc-800/50 border border-white/5 text-zinc-300 text-xs rounded-lg px-3 pr-8 w-26 h-9 focus:outline-none focus:border-amber-500 cursor-pointer text-ellipsis overflow-hidden"
                       disabled={isRendering}
-                      title="Select Render Engine"
+                      title={tr('Select Render Engine')}
                       name="engine"
                       id="engine-select"
-                      aria-label="Render Engine"
+                      aria-label={tr('Render Engine')}
                     >
-                      <option value="mediarecorder" className="bg-zinc-900">Realtime</option>
-                      <option value="webcodecs" className="bg-zinc-900">WebCodecs</option>
-                      <option value="ffmpeg" className="bg-zinc-900">FFMPEG</option>
+                      <option value="mediarecorder" className="bg-zinc-900">{tr('Realtime')}</option>
+                      <option value="webcodecs" className="bg-zinc-900">{tr('WebCodecs')}</option>
+                      <option value="ffmpeg" className="bg-zinc-900">{tr('FFMPEG')}</option>
                     </select>
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 text-zinc-500">
                       <svg className="fill-current h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
@@ -4832,9 +5191,9 @@ function App() {
                     <select
                       value={renderFps}
                       onChange={(e) => setRenderFps(parseInt(e.target.value))}
-                      className="appearance-none bg-zinc-800/50 border border-white/5 text-zinc-300 text-xs rounded-lg px-3 pr-8 w-20 h-9 focus:outline-none focus:border-purple-500 cursor-pointer"
+                      className="appearance-none bg-zinc-800/50 border border-white/5 text-zinc-300 text-xs rounded-lg px-3 pr-8 w-20 h-9 focus:outline-none focus:border-amber-500 cursor-pointer"
                       disabled={isRendering}
-                      title="Select Frame Rate"
+                      title={tr('Select Frame Rate')}
                     >
                       <option value="24" className="bg-zinc-900">24 FPS</option>
                       <option value="25" className="bg-zinc-900">25 FPS</option>
@@ -4852,7 +5211,7 @@ function App() {
                     onClick={handleExportVideoDispatch}
                     disabled={isRendering || !audioSrc}
                     className="p-2 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white cursor-pointer transition-colors"
-                    title={`Export as Video (${renderEngine === 'ffmpeg' ? 'FFmpeg' : 'MediaRecorder'})`}
+                    title={`${tr('Export as Video')} (${renderEngine === 'ffmpeg' ? 'FFmpeg' : 'MediaRecorder'})`}
                   >
                     <Video size={18} />
                   </button>
@@ -4942,7 +5301,7 @@ function App() {
         isRendering && (
           <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-8 text-center space-y-6">
             <div className={renderEngine === 'ffmpeg' ? "animate-pulse" : "animate-bounce"}>
-              <Video size={48} className={renderEngine === 'ffmpeg' ? "text-orange-500" : "text-purple-500"} />
+              <Video size={48} className={renderEngine === 'ffmpeg' ? "text-orange-500" : "text-amber-500"} />
             </div>
             <h2 className="text-2xl font-bold text-white">
               {renderEngine === 'ffmpeg' ? 'FFmpeg Rendering' : 'Rendering Video'} ({aspectRatio} {resolution})
@@ -4965,7 +5324,7 @@ function App() {
 
             <div className="w-full max-w-md h-2 bg-zinc-800 rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-300 ease-linear ${renderEngine === 'ffmpeg' ? 'bg-orange-500' : 'bg-purple-500'}`}
+                className={`h-full transition-all duration-300 ease-linear ${renderEngine === 'ffmpeg' ? 'bg-orange-500' : 'bg-amber-500'}`}
                 style={{ width: `${renderProgress}%` }}
               ></div>
             </div>
@@ -5048,73 +5407,73 @@ function App() {
                 <X size={20} />
               </button>
               <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-                <Keyboard className="text-purple-500" />
-                Keyboard Shortcuts
+                <Keyboard className="text-amber-500" />
+                {tr('Keyboard Shortcuts')}
               </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
                 <div className="space-y-4">
-                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider">Playback</h3>
+                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider">{tr('Playback')}</h3>
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Play / Pause</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">Space</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Stop</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">S / V</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Previous Song</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">B</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Next Song</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">N</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Rewind 5s</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">←</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Forward 5s</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">→</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Repeat Mode</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">R</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Mute</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">M</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Play / Pause')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">{tr('Space')}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Stop')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">{tr('S / V')}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Previous Song')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">B</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Next Song')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">N</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Rewind 5s')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">←</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Forward 5s')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">→</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Repeat Mode')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">R</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Mute')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">M</span></div>
                   </div>
 
-                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mt-6">File Loading</h3>
+                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mt-6">{tr('File Loading')}</h3>
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Load Audio / Video</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">1</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Load Lyrics / Sub-file</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">2</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Load Font File</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">3</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Load Audio / Video')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">1</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Load Lyrics / Sub-file')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">2</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Load Font File')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">3</span></div>
                   </div>
 
-                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mt-6">Interface</h3>
+                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mt-6">{tr('Interface')}</h3>
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Fullscreen</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">F</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Minimal Mode</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">O</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Hold UI (No Auto-Hide)</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">H</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Toggle Header Info</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">I</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Toggle Shortcut Info</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">K</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Toggle Player</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">Y</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Lyric Visibility: Default / Auto</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">Q</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">UI Scale (Zoom / Reset)</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">8 / 9 / 0</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Fullscreen')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">F</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Minimal Mode')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">O</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Hold UI (No Auto-Hide)')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">H</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Toggle Header Info')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">I</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Toggle Shortcut Info')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">K</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Toggle Player')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">Y</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Lyric Visibility: Default / Auto')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">Q</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('UI Scale (Zoom / Reset)')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">8 / 9 / 0</span></div>
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider">Editor & Styles</h3>
+                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider">{tr('Editor & Styles')}</h3>
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Toggle Timeline</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">T</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Toggle Playlist</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">P</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Render Settings</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">D</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Random Settings</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">L</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Export Video</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">Ctrl+Shift+E</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Font Size</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">+ / -</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Cycle Visual Preset</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">J</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Cycle Highight Effect</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">Z</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Toggle Highlight</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">X</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Cycle Text Case</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">C</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Cycle Lyric Mode</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">G</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Toggle Timeline')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">T</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Toggle Playlist')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">P</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Render Settings')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">D</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Random Settings')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">L</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Export Video')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">Ctrl+Shift+E</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Font Size')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">+ / -</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Cycle Visual Preset')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">J</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Cycle Highight Effect')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">Z</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Toggle Highlight')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">X</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Cycle Text Case')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">C</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Cycle Lyric Mode')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">G</span></div>
                   </div>
 
 
-                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mt-6">Mouse & Touch</h3>
+                  <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mt-6">{tr('Mouse & Touch')}</h3>
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Toggle Minimal Mode</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">Double Click / Tap</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Seek to Lyric</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">Click Line</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">Copy Active Lyric</span> <span className="font-mono text-purple-400 bg-white/5 px-2 py-0.5 rounded">Click Active Line</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Toggle Minimal Mode')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">{tr('Double Click / Tap')}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Seek to Lyric')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">{tr('Click Line')}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Copy Active Lyric')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">{tr('Click Active Line')}</span></div>
                   </div>
                 </div>
               </div>
 
               <div className="mt-8 pt-6 border-t border-white/5 text-center">
                 <p className="text-zinc-500 text-sm">
-                  Shortcuts are disabled during video rendering.
+                  {tr('Shortcuts are disabled during video rendering.')}
                 </p>
               </div>
             </div>

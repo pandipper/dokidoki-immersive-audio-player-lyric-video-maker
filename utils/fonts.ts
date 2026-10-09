@@ -1,5 +1,12 @@
 export const fontGroups = [
     {
+        label: "dokidoki 本地字体",
+        options: [
+            { label: "ChillRoundM 寒蝉圆体", value: "'ChillRoundM', ui-sans-serif, system-ui, sans-serif" },
+            { label: "OPPOSans 粗体", value: "'OPPOSans', 'ChillRoundM', ui-sans-serif, sans-serif" },
+        ]
+    },
+    {
         label: "Modern & Clean",
         options: [
             { label: "System Sans Serif", value: "ui-sans-serif, system-ui, sans-serif" },
@@ -108,6 +115,43 @@ export const singleWeightFonts = ['Metal Mania', 'Bebas Neue', 'Anton', 'Staatli
     'Press Start 2P', 'Fira Code', 'JetBrains Mono', 'UnifrakturMaguntia', 'Creepster', 'Pirata One',
     'Rubik Moonrocks', 'Nabla'];
 
+/**
+ * 仓库内自带、离线可用的字体族。这些字体已经通过 index.css 的 @font-face 声明，
+ * 不需要（也不应该）去 Google Fonts 拉取。
+ */
+export const localFontFamilies = new Set([
+    'ChillRoundM',
+    'OPPOSans',
+    'Dancing Script',
+    'Fredoka One',
+    'Orbitron',
+    'Shadows Into Light',
+    'UnifrakturMaguntia',
+]);
+
+/** 系统字体前缀，无需联网 */
+const isSystemFont = (family: string) =>
+    family.startsWith('ui-') ||
+    ['system-ui', 'sans-serif', 'serif', 'monospace', 'cursive'].includes(family);
+
+/** 从 CSS font-family 值里取出第一个字体族名 */
+export const firstFontFamily = (value: string): string =>
+    (value.split(',')[0] || '').trim().replace(/['"]/g, '');
+
+/**
+ * 按需加载某个字体。
+ *
+ * 原实现会在启动时一次性往 <head> 插入 8 个 Google Fonts 样式表，覆盖约 50 个字体族，
+ * 这在离线环境下既会失败、又会拖慢首屏。改成「选中时才拉」之后：
+ *   - 离线启动零网络请求，默认字体（ChillRoundM）本地直接可用；
+ *   - 只有在用户主动选择某个 Google 字体时才会去请求网络。
+ */
+export const ensureFontLoaded = (fontValue: string) => {
+    const family = firstFontFamily(fontValue);
+    if (!family || isSystemFont(family) || localFontFamilies.has(family)) return;
+    loadSingleGoogleFont(family);
+};
+
 export const loadGoogleFonts = () => {
     // Preconnects
     if (!document.getElementById('google-fonts-preconnect')) {
@@ -162,13 +206,18 @@ export const loadGoogleFonts = () => {
 };
 
 export const loadSingleGoogleFont = (fontName: string) => {
-    const id = `google-font-${fontName.replace(/\s+/g, '-').toLowerCase()}`;
+    const cleanName = fontName.replace(/['"]/g, '').trim();
+    if (!cleanName) return;
+
+    // 本地/系统字体不需要联网
+    if (isSystemFont(cleanName) || localFontFamilies.has(cleanName)) return;
+
+    const id = `google-font-${cleanName.replace(/\s+/g, '-').toLowerCase()}`;
     if (document.getElementById(id)) return;
 
-    const cleanName = fontName.replace(/['"]/g, '');
-    let param = `family=${fontName.replace(/\s+/g, '+')}:wght@400;700`;
+    let param = `family=${cleanName.replace(/\s+/g, '+')}:wght@400;700`;
     if (singleWeightFonts.includes(cleanName)) {
-        param = `family=${fontName.replace(/\s+/g, '+')}`;
+        param = `family=${cleanName.replace(/\s+/g, '+')}`;
     }
 
     const link = document.createElement('link');

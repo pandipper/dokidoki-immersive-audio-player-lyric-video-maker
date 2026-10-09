@@ -1,0 +1,203 @@
+/**
+ * 简体中文词条表。
+ *
+ * 以「英文原文」为 key，方便：
+ *   - 在 JSX 里直接 `tr('Load Lyrics')`，漏翻时自动回退英文，不会出现空白；
+ *   - 后续增删语言时只动这一个文件。
+ *
+ * 覆盖范围：主界面（页头 / 底部控制条 / 空状态 / 快捷键面板 / 提示条 / 预设下拉）。
+ * 不含 RenderSettings 与 VisualEditor 两个重型设置面板。
+ */
+export const zh: Record<string, string> = {
+    // ---------- 页头按钮 ----------
+    'Bypass Auto-hide (H)': '保持界面常显 (H)',
+    'Decrease UI Scale (8)': '缩小界面 (8)',
+    'Reset UI Scale to 100% (Click)': '恢复界面 100% (点击)',
+    'Increase UI Scale (9)': '放大界面 (9)',
+    'Minimal Mode (O)': '极简模式 (O)',
+    'Toggle Playlist (L)': '播放列表 (L)',
+    'Toggle Timeline (T)': '时间轴 (T)',
+    'Render Settings (D)': '导出设置 (D)',
+    'Keyboard Shortcuts (Y)': '快捷键 (Y)',
+    'Fullscreen (F)': '全屏 (F)',
+    'Switch Language': '切换语言',
+
+    // ---------- 底部控制条 ----------
+    'Load Lyrics (.lrc, .srt, .vtt, .ttml) (2)': '载入字幕 (.lrc / .srt / .vtt / .ttml) (2)',
+    'Clear Lyrics': '清空字幕',
+    'Increase Lyric Offset (+0.1s)': '字幕提前 0.1s',
+    'Decrease Lyric Offset (-0.1s)': '字幕延后 0.1s',
+    'Reset Default Font': '恢复默认字体',
+    'Increase Font Size': '增大字号',
+    'Decrease Font Size': '减小字号',
+    'Select Visual Preset': '选择视觉预设',
+    'Stop (S)': '停止 (S)',
+    'Previous Song': '上一首',
+    'Rewind 5s': '后退 5 秒',
+    'Fast Forward 5s': '前进 5 秒',
+    'Next Song': '下一首',
+    'Toggle Lyric Highlight': '切换字幕高亮',
+    'Toggle Resolution (720p / 1080p)': '切换分辨率 (720p / 1080p)',
+    'Toggle Aspect Ratio (16:9 / 9:16 / 3:4 / 1:1 / 1:2 / 2:1 / 2:3 / 3:2)': '切换画面比例',
+    'Select Render Engine': '选择导出引擎',
+    'Select Frame Rate': '选择帧率',
+    'Seek Progress': '播放进度',
+    'Volume Control': '音量',
+    'Visual Preset': '视觉预设',
+    'Render Engine': '导出引擎',
+    'Load Audio or video (1)': '载入音频或视频 (1)',
+
+    // ---------- 拖放遮罩 ----------
+    'Drop files to load': '松开即可载入',
+    'Audio / Video': '音频 / 视频',
+    'MP3, WAV, FLAC, MP4...': 'MP3、WAV、FLAC、M4A、MP4、MOV…',
+    'Lyrics / Subtitles': '字幕 / 歌词',
+    'LRC, SRT, VTT, TTML...': 'LRC、SRT、VTT、TTML…',
+    'Custom Font': '自定义字体',
+    'TTF, OTF, WOFF, WOFF2...': 'TTF、OTF、WOFF、WOFF2…',
+    'Release your files anywhere to instantly import them into the player and maker workspace.':
+        '把文件拖到窗口任意位置即可载入播放器。',
+
+    // ---------- 空状态 ----------
+    'Drag & drop files or load audio & lyrics to start': '拖入文件，或点击下方按钮载入音频与字幕',
+    'Shortcuts: 1 (Load Audio/Video), 2 (Load Lyrics), 3 (Load Font), Space (Play), S / V (Stop)':
+        '快捷键：1 载入音频/视频 · 2 载入字幕 · 3 载入字体 · 空格 播放 · S / V 停止',
+
+    // ---------- 视觉预设下拉 ----------
+    'Default': '默认',
+    'Big Text': '大标题',
+    'Big Text (UP)': '大标题（大写）',
+    'Big Center': '居中大字',
+    'Metal': '金属',
+    'Kids': '童趣',
+    'Sad': '伤感',
+    'Romantic': '浪漫',
+    'Tech': '科技',
+    'Gothic': '哥特',
+    'Classic Serif': '经典衬线',
+    'Monospace': '等宽',
+    'Testing (UP)': '测试（大写）',
+    'Testing': '测试',
+    'One Line (UP)': '单行（大写）',
+    'One Line': '单行',
+    'Slideshow': '幻灯片',
+    'Just Video': '只要画面',
+    'Subtitle': '字幕',
+    'None': '无',
+
+    // ---------- 导出引擎 / 帧率 ----------
+    'Realtime': '实时',
+    'WebCodecs': 'WebCodecs',
+    'FFMPEG': 'FFmpeg',
+
+    // ---------- 快捷键面板 ----------
+    'Playback': '播放控制',
+    'Play / Pause': '播放 / 暂停',
+    'Space': '空格',
+    'Stop': '停止',
+    'S / V': 'S / V',
+    'Forward 5s': '前进 5 秒',
+    'Repeat Mode': '循环模式',
+    'Mute': '静音',
+    'File Loading': '文件载入',
+    'Load Audio / Video': '载入音频 / 视频',
+    'Load Lyrics / Sub-file': '载入字幕文件',
+    'Load Font File': '载入字体文件',
+    'Interface': '界面',
+    'Fullscreen': '全屏',
+    'Minimal Mode': '极简模式',
+    'Hold UI (No Auto-Hide)': '保持界面常显',
+    'Toggle Header Info': '切换顶部信息',
+    'Toggle Shortcut Info': '切换快捷键面板',
+    'Toggle Player': '切换播放器',
+    'Lyric Visibility: Default / Auto': '字幕可见性：默认 / 自动',
+    'UI Scale (Zoom / Reset)': '界面缩放（放大 / 重置）',
+    'Editor & Styles': '编辑器与样式',
+    'Toggle Timeline': '切换时间轴',
+    'Toggle Playlist': '切换播放列表',
+    'Render Settings': '导出设置',
+    'Random Settings': '随机配置',
+    'Export Video': '导出视频',
+    'Font Size': '字号',
+    'Cycle Visual Preset': '循环切换视觉预设',
+    'Cycle Highight Effect': '循环切换高亮效果',
+    'Toggle Highlight': '切换高亮',
+    'Cycle Text Case': '循环切换大小写',
+    'Cycle Lyric Mode': '循环切换字幕模式',
+    'Mouse & Touch': '鼠标与触屏',
+    'Toggle Minimal Mode': '切换极简模式',
+    'Double Click / Tap': '双击 / 点按',
+    'Seek to Lyric': '跳到对应字幕',
+    'Click Line': '点击某一行',
+    'Copy Active Lyric': '复制当前字幕',
+    'Click Active Line': '点击当前行',
+
+    // ---------- 提示条 ----------
+    'Failed to load audio source for rendering.': '无法为导出读取音频源。',
+    'Please load an audio file first.': '请先载入音频文件。',
+    'No audio file available for FFmpeg export.': '没有可用于 FFmpeg 导出的音频文件。',
+    'FFmpeg requires SharedArrayBuffer. Please ensure proper server headers (COOP/COEP) or use MediaRecorder instead.':
+        'FFmpeg 需要 SharedArrayBuffer，请确认服务端已设置 COOP/COEP 响应头，或改用 MediaRecorder 导出。',
+    'No audio file available for export.': '没有可用于导出的音频文件。',
+    'WebCodecs is not supported in this browser.': '当前浏览器不支持 WebCodecs。',
+    '🎲 Random settings generated!': '🎲 已生成随机配置！',
+    'Lyric copied to clipboard': '已复制该行字幕',
+
+    // ---------- 元信息占位 ----------
+    'No Audio Loaded': '未载入音频',
+    'Select a file': '请选择文件',
+    'Load Custom Font (.ttf, .otf, .woff) (3)': '载入自定义字体 (.ttf / .otf / .woff) (3)',
+    'Custom ✨': '自定义 ✨',
+
+    // ---------- 状态提示 ----------
+    'Repeat': '循环',
+    'Lyric Visibility': '字幕可见性',
+    'Background Blur': '背景模糊',
+    'Export as Video': '导出视频',
+    'Off': '关闭',
+    'On': '开启',
+    'One': '单曲循环',
+    'Play All (No Repeat)': '顺序播放',
+    'Loop All': '列表循环',
+    'Auto': '自动',
+
+    // ---------- 快捷键反馈 / 导出状态 ----------
+    'UI Scale': '界面缩放',
+    'Repeat Off': '关闭循环',
+    'Loop One': '单曲循环',
+    'Play All (Stop)': '顺序播放',
+    'Loop Playlist': '列表循环',
+    'Lyric Mode': '字幕模式',
+    'Text Case': '大小写',
+    'Highlight': '高亮',
+    'Effect': '特效',
+    'Preset': '预设',
+    'Loaded font': '已载入字体',
+    'Loaded Channel font': '已载入频道字体',
+    'Loaded Info font': '已载入信息字体',
+    'Unsupported file type': '不支持的文件类型',
+    'Starting Playlist Render': '开始导出播放列表',
+    'Starting Single Track Render...': '开始导出单个视频…',
+    'Playlist exported successfully!': '播放列表导出成功！',
+    'Video exported successfully!': '视频导出成功！',
+    'FFmpeg render failed': 'FFmpeg 导出失败',
+    'Render failed': '导出失败',
+    'Render queue is empty!': '导出队列为空！',
+    'Stopped': '已停止',
+
+    'Keyboard Shortcuts': '快捷键',
+    'Shortcuts are disabled during video rendering.': '导出视频时快捷键不可用。',
+    'Confirm Action': '请确认',
+    'Cancel': '取消',
+    'Confirm': '确定',
+    'Start Rendering?': '开始导出？',
+    ' Please do not switch tabs during rendering.': ' 导出过程中请不要切换标签页。',
+
+    // ---------- 错误提示 ----------
+    'Failed to parse lyric file.': '字幕文件解析失败。',
+    'Custom fonts are not supported in this browser.': '当前浏览器不支持自定义字体。',
+    'Failed to load font file.': '字体文件载入失败。',
+    'Failed to load channel font file.': '频道字体文件载入失败。',
+    'Failed to load info font file.': '信息字体文件载入失败。',
+    'Your browser does not support audio capture for recording.': '当前浏览器不支持录音所需的音频采集。',
+};

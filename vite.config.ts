@@ -36,7 +36,8 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         workbox: {
           // Include WASM and Worker files in PWA caching
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,wasm,worker.js}'],
+          // woff2/woff/ttf/otf 一并纳入预缓存：离线时自定义字体也必须可用
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,wasm,worker.js,woff2,woff,ttf,otf}'],
           // Increase limit to handle the 30MB+ FFmpeg WASM file
           maximumFileSizeToCacheInBytes: 50 * 1024 * 1024,
           runtimeCaching: [
@@ -68,9 +69,9 @@ export default defineConfig(({ mode }) => {
           ],
         },
         manifest: {
-          name: 'Immersive Audio Player',
-          short_name: 'AudioPlayer',
-          description: 'An immersive audio player application',
+          name: 'dokidoki 字幕播放器',
+          short_name: 'dokidoki',
+          description: '字幕即画面 · 音频/视频字幕播放与对齐工具',
           theme_color: '#09090b',
           background_color: '#09090b',
           display: 'standalone',

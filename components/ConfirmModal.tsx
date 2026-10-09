@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, X } from './Icons';
+import { translate, loadLang } from '../locales';
 
 interface ConfirmModalProps {
     isOpen: boolean;
@@ -9,7 +10,11 @@ interface ConfirmModalProps {
     title?: string;
 }
 
-const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, message, onConfirm, onCancel, title = "Confirm Action" }) => {
+// 这个组件由 UIProvider 直接渲染，拿不到 App 的 lang state，
+// 所以每次渲染时从 localStorage 读取当前语言即可。
+const t = (s: string) => translate(s, loadLang());
+
+const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, message, onConfirm, onCancel, title }) => {
     const [isVisible, setIsVisible] = useState(false);
 
     useEffect(() => {
@@ -63,7 +68,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, message, onConfirm,
                             <AlertTriangle className="text-orange-500" size={24} />
                         </div>
                         <div className="flex-1">
-                            <h3 className="text-lg font-bold text-white mb-2">{title}</h3>
+                            <h3 className="text-lg font-bold text-white mb-2">{title || t('Confirm Action')}</h3>
                             <p className="text-zinc-400 text-sm leading-relaxed">
                                 {message}
                             </p>
@@ -82,13 +87,13 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, message, onConfirm,
                         onClick={onCancel}
                         className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                     >
-                        Cancel
+                        {t('Cancel')}
                     </button>
                     <button
                         onClick={onConfirm}
                         className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-500 rounded-lg shadow-lg hover:shadow-purple-500/20 transition-all"
                     >
-                        Confirm
+                        {t('Confirm')}
                     </button>
                 </div>
             </div>

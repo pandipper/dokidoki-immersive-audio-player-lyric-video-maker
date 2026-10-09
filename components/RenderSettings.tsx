@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { X, Video, Settings, ImageIcon, Type, Layout, Palette, Music, FileText, Check, ListMusic, Bold, Italic, Underline, Strikethrough, AlignVerticalJustifyCenter, AlignVerticalJustifyStart, AlignVerticalJustifyEnd, Upload, Trash2, ChevronDown, Maximize, RotateCcw, Download, Sparkles, Activity, Shuffle, Sliders } from './Icons';
 import { RenderConfig, VideoPreset, RenderEngine, FFmpegCodec } from '../types';
-import { fontGroups, loadSingleGoogleFont } from '../utils/fonts';
+import { fontGroups, loadSingleGoogleFont, ensureFontLoaded } from '../utils/fonts';
 import { PRESET_DEFINITIONS, videoPresetGroups } from '../utils/presets';
 import { useUI } from '../contexts/UIContext';
 
@@ -804,6 +804,7 @@ const FontSelector: React.FC<{ value: string; onChange: (val: string) => void; c
     }, [value, isExpanded]);
 
     const handleMouseEnter = (fontValue: string) => {
+        ensureFontLoaded(fontValue);
         onChange(fontValue);
     };
 
@@ -814,6 +815,7 @@ const FontSelector: React.FC<{ value: string; onChange: (val: string) => void; c
     };
 
     const handleSelect = (fontValue: string) => {
+        ensureFontLoaded(fontValue);
         onChange(fontValue);
         setOriginalValue(fontValue);
         setIsExpanded(false);
