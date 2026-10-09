@@ -6,7 +6,8 @@
  *   - 后续增删语言时只动这一个文件。
  *
  * 覆盖范围：主界面（页头 / 底部控制条 / 空状态 / 快捷键面板 / 提示条 / 预设下拉）。
- * 不含 RenderSettings 与 VisualEditor 两个重型设置面板。
+ * 设置面板（RenderSettings / VisualEditor / PlaylistEditor）的词条在 zhPanels.ts。
+ * 两个表在 locales/index.ts 里合并，**本文件优先级更高**。
  */
 export const zh: Record<string, string> = {
     // ---------- 页头按钮 ----------
@@ -17,7 +18,7 @@ export const zh: Record<string, string> = {
     'Minimal Mode (O)': '极简模式 (O)',
     'Toggle Playlist (L)': '播放列表 (L)',
     'Toggle Timeline (T)': '时间轴 (T)',
-    'Render Settings (D)': '导出设置 (D)',
+    'Render Settings (D)': '渲染设置 (D)',
     'Keyboard Shortcuts (Y)': '快捷键 (Y)',
     'Fullscreen (F)': '全屏 (F)',
     'Switch Language': '切换语言',
@@ -44,8 +45,24 @@ export const zh: Record<string, string> = {
     'Seek Progress': '播放进度',
     'Volume Control': '音量',
     'Visual Preset': '视觉预设',
-    'Render Engine': '导出引擎',
+    'Render Engine': '渲染引擎',
     'Load Audio or video (1)': '载入音频或视频 (1)',
+
+    // ---------- 悬浮视频小窗 ----------
+    'Video Window': '视频小窗',
+    'Restore Video Window': '恢复视频小窗',
+    'Show floating video window (W)': '显示悬浮视频小窗 (W)',
+    'Hide floating video window (W)': '隐藏悬浮视频小窗 (W)',
+    'Toggle Video Window': '显示 / 隐藏悬浮视频小窗',
+    'Floating video window: shown': '悬浮视频小窗：已显示',
+    'Floating video window: hidden': '悬浮视频小窗：已隐藏',
+
+    // ---------- 底部状态徽章 ----------
+    'AUTO': '自动',
+    'DEFAULT': '默认',
+    'BLUR': '模糊',
+    'SHARP': '锐利',
+    'Unknown Artist': '未知艺术家',
 
     // ---------- 拖放遮罩 ----------
     'Drop files to load': '松开即可载入',
@@ -115,7 +132,7 @@ export const zh: Record<string, string> = {
     'Editor & Styles': '编辑器与样式',
     'Toggle Timeline': '切换时间轴',
     'Toggle Playlist': '切换播放列表',
-    'Render Settings': '导出设置',
+    'Render Settings': '渲染设置',
     'Random Settings': '随机配置',
     'Export Video': '导出视频',
     'Font Size': '字号',

@@ -19,7 +19,6 @@ interface PersistedState {
     x: number;
     y: number;          // 窗口中心点的 Y 坐标（px）
     width: number;
-    visible: boolean;
     hasUserResized: boolean;
 }
 
@@ -27,7 +26,6 @@ const DEFAULT_STATE: PersistedState = {
     x: 20,
     y: 0,               // 0 表示「跟随视口垂直居中」，首次挂载时再算真实值
     width: 340,
-    visible: true,
     hasUserResized: false,
 };
 
@@ -92,10 +90,13 @@ const FloatingVideoWindow: React.FC<FloatingVideoWindowProps> = ({
     const safeAspect = aspect > 0 ? aspect : MIN_ASPECT_FALLBACK;
     const height = width / safeAspect;
 
-    // 持久化
+    // 持久化位置与尺寸。
+    // 注意：**可见性刻意不持久化** —— 由 App 的 state 单独掌管，
+    // 这样即使用户把窗口收起来，刷新后也一定会重新出现，
+    // 不会出现「关掉之后再也没法找回」的情况。
     useEffect(() => {
-        saveState({ x, y, width, visible, hasUserResized });
-    }, [x, y, width, visible, hasUserResized]);
+        saveState({ x, y, width, hasUserResized });
+    }, [x, y, width, hasUserResized]);
 
     // 视口尺寸变化时，把窗口拉回可视范围内
     useEffect(() => {
@@ -237,7 +238,7 @@ const FloatingVideoWindow: React.FC<FloatingVideoWindowProps> = ({
                     <span className="text-[10px] text-zinc-300 truncate flex-1">{title || '视频'}</span>
                     <button
                         className="p-0.5 rounded text-zinc-400 hover:text-white hover:bg-white/15 transition-colors shrink-0"
-                        title="隐藏视频窗口"
+                        title="隐藏视频窗口（按 W 或点底部「视频小窗」可恢复）"
                         onPointerDown={e => e.stopPropagation()}
                         onClick={e => { e.stopPropagation(); onVisibleChange(false); }}
                     >

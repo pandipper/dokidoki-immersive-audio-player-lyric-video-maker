@@ -132,10 +132,16 @@ function App() {
   const [showShortcutInfo, setShowShortcutInfo] = useState(false);
   const [uiScale, setUiScale] = useState(1.0);
 
-  // 界面语言：默认中文，可切换回英文。词条见 locales/zh.ts
+  // 界面语言：默认中文，可切换回英文。词条见 locales/zh.ts + locales/zhPanels.ts
   const [lang, setLang] = useState<Lang>(loadLang);
   const tr = useCallback((en: string) => translate(en, lang), [lang]);
-  useEffect(() => { saveLang(lang); }, [lang]);
+  // 同步落盘（不用 useEffect）：设置面板里的模块级 t() 直接读 localStorage 缓存，
+  // 必须在本轮渲染之前就写进去，否则面板会慢一拍、仍然显示旧语言。
+  const toggleLang = useCallback(() => {
+    const next: Lang = loadLang() === 'zh' ? 'en' : 'zh';
+    saveLang(next);
+    setLang(next);
+  }, []);
 
   // State: Drag and Drop
   const [isDragging, setIsDragging] = useState(false);
@@ -226,6 +232,13 @@ function App() {
   useEffect(() => {
     renderConfigRef.current = renderConfig;
   }, [renderConfig]);
+
+  // 当前字幕的镜像。拖入音频时如果没带字幕，需要把「现在显示的字幕」继承给新曲目，
+  // 而事件处理器里读不到最新的 state，只能靠这个 ref。
+  const lyricsRef = useRef<LyricLine[]>([]);
+  useEffect(() => {
+    lyricsRef.current = lyrics;
+  }, [lyrics]);
 
   const progressBarRef = useRef<HTMLDivElement>(null);
   const volumeBarRef = useRef<HTMLDivElement>(null);
@@ -463,12 +476,17 @@ function App() {
       }
     }
 
+    // 本次没有配对字幕时，把「当前已显示的字幕」继承给新曲目。
+    // 否则下面同步 playlist 的 effect 会认为新曲目没有字幕而 setLyrics([])，
+    // 把用户刚拖进来的字幕清掉 —— 这正是「先拖字幕再拖音频，字幕被覆盖」的根因。
+    const effectiveLyrics = (lyricFile || parsedLyrics.length > 0) ? parsedLyrics : lyricsRef.current;
+
     const newItemId = Math.random().toString(36).substr(2, 9);
     const newItem: PlaylistItem = {
       id: newItemId,
       audioFile: file,
       lyricFile: lyricFile,
-      parsedLyrics: parsedLyrics,
+      parsedLyrics: effectiveLyrics,
       metadata: fallbackMeta,
       duration: 0
     };
@@ -577,22 +595,20 @@ function App() {
         });
       });
     } else if (file.type.startsWith('video/')) {
-      // If video, use it as background
+      // 视频文件只作为「播放源」，画面交给悬浮小窗显示。
+      // 这里刻意不再写入 metadata.coverUrl / backgroundType:'video'：
+      // 否则主画面背景会被替换成这条视频并全屏 60% 透明铺开（原项目行为），
+      // 于是小窗和背景会同时播放同一个视频。主画面背景保持「渲染设置」里的配置。
       setIsBgVideoReady(false);
-      const newMetadata: AudioMetadata = {
-        ...fallbackMeta,
-        coverUrl: url,
-        backgroundType: 'video'
-      };
-      setMetadata(newMetadata);
-      setPlaylist(prev => prev.map(item =>
-        item.id === newItemId ? { ...item, metadata: newMetadata } : item
-      ));
     }
 
+    // 只有「随音频一起拖入并配对成功的字幕」才覆盖当前字幕。
+    // 只拖入音频时保留已加载的字幕，避免先拖字幕再拖音频导致字幕被清空。
+    if (lyricFile || parsedLyrics.length > 0) {
+      setLyrics(parsedLyrics);
+      setLyricOffset(0);
+    }
     // Reset play state
-    setLyrics(parsedLyrics);
-    setLyricOffset(0);
     setIsPlaying(false);
     setCurrentTime(0);
     
@@ -797,8 +813,23 @@ function App() {
       }
     }
 
+    // Fallback pairing: the strict base-name grouping above only works when the media and the
+    // subtitle happen to share a name. Real-world downloads rarely do (e.g. "podcast_009_128k.mp3"
+    // + "某播客第9期.srt"), so when the drop contains exactly ONE media file and ONE subtitle file
+    // and their base names differ, pair them anyway.
+    const mediaGroups = Array.from(fileGroups.entries()).filter(([, g]) => g.audio);
+    const lyricGroups = Array.from(fileGroups.entries()).filter(([, g]) => g.lyric);
+    if (mediaGroups.length === 1 && lyricGroups.length === 1) {
+      const [mediaKey, mediaGroup] = mediaGroups[0];
+      const [lyricKey, lyricGroup] = lyricGroups[0];
+      if (mediaKey !== lyricKey && !mediaGroup.lyric) {
+        mediaGroup.lyric = lyricGroup.lyric;
+        fileGroups.delete(lyricKey);
+      }
+    }
+
     // Process the grouped files
-    for (const [basename, group] of fileGroups.entries()) {
+    for (const [, group] of fileGroups.entries()) {
       if (group.audio) {
         await loadAudioFile(group.audio, group.lyric);
       } else if (group.lyric) {
@@ -893,17 +924,19 @@ function App() {
     setAudioSrc(url);
     setCurrentAudioFile(track.audioFile);
 
-    const isVideo = track.audioFile.type.startsWith('video/') || track.metadata.backgroundType === 'video';
+    const isVideo = track.audioFile.type.startsWith('video/');
     if (isVideo) {
       setIsBgVideoReady(false);
     }
 
     // Metadata - use cover art from track if available
+    // 视频文件不写入 coverUrl / backgroundType:'video'：它只作为播放源，
+    // 画面交给悬浮小窗，主画面背景保持「渲染设置」里的配置。
     setMetadata({
       title: track.metadata.title,
       artist: track.metadata.artist,
-      coverUrl: isVideo ? url : (track.metadata.coverUrl || null),
-      backgroundType: isVideo ? 'video' : 'image'
+      coverUrl: isVideo ? null : (track.metadata.coverUrl || null),
+      backgroundType: 'image'
     });
 
     // Reset Lyrics
@@ -1222,7 +1255,11 @@ function App() {
 
   // 「尚未载入」的占位文案需要跟随语言切换，所以放在渲染期翻译
   const displayTitle = metadata.title === 'No Audio Loaded' ? tr('No Audio Loaded') : metadata.title;
-  const displayArtist = metadata.artist === 'Select a file' ? tr('Select a file') : metadata.artist;
+  const displayArtist = metadata.artist === 'Select a file'
+    ? tr('Select a file')
+    : metadata.artist === 'Unknown Artist'
+      ? tr('Unknown Artist')
+      : metadata.artist;
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value);
@@ -2908,13 +2945,25 @@ function App() {
             return { ...prev, lyricVisibilityMode: next };
           });
           break;
+        case 'w': // Toggle floating video window (W = Window)
+          if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) break;
+          e.preventDefault();
+          {
+            const nextVisible = !videoWindowVisible;
+            setVideoWindowVisible(nextVisible);
+            toast.success(
+              nextVisible ? tr('Floating video window: shown') : tr('Floating video window: hidden'),
+              { id: 'video-window' }
+            );
+          }
+          break;
 
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying, repeatMode, activeTab, isRendering, resetIdleTimer, handleAbortRender, isPlaylistMode, playNextSong, playPreviousSong, toast, isMinimalMode, preset, bypassAutoHide, isMuted, showRenderSettings, showShortcutInfo]);
+  }, [isPlaying, repeatMode, activeTab, isRendering, resetIdleTimer, handleAbortRender, isPlaylistMode, playNextSong, playPreviousSong, toast, isMinimalMode, preset, bypassAutoHide, isMuted, showRenderSettings, showShortcutInfo, videoWindowVisible]);
 
   // Smooth Playback Animation Loop (Throttled to ~30fps)
   useEffect(() => {
@@ -3692,7 +3741,7 @@ function App() {
                     )
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-zinc-500">
-                      <Music size={24} />
+                      {videoAspect > 0 ? <Video size={24} /> : <Music size={24} />}
                     </div>
                   )}
                   <label className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
@@ -3749,7 +3798,7 @@ function App() {
                 {bypassAutoHide ? <Eye size={20} /> : <EyeOff size={20} />}
               </button>
               <button
-                onClick={() => setLang(l => (l === 'zh' ? 'en' : 'zh'))}
+                onClick={toggleLang}
                 className="h-9 px-2.5 rounded-full transition-colors bg-black/30 text-zinc-300 hover:bg-white/10 text-xs font-bold flex items-center justify-center min-w-[38px]"
                 title={tr('Switch Language')}
               >
@@ -4884,11 +4933,14 @@ function App() {
                   </label>
                   <button
                     onClick={() => setVideoWindowVisible(v => !v)}
-                    className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${videoWindowVisible ? 'text-amber-400' : 'text-zinc-400 hover:text-white'}`}
-                    title={videoWindowVisible ? '隐藏悬浮视频小窗' : '显示悬浮视频小窗'}
+                    className={`px-2.5 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1.5 ${videoWindowVisible ? 'text-amber-400' : 'text-zinc-300 hover:text-white ring-1 ring-amber-400/40 bg-amber-400/5'}`}
+                    title={videoWindowVisible ? tr('Hide floating video window (W)') : tr('Show floating video window (W)')}
                     disabled={isRendering}
                   >
                     {videoWindowVisible ? <Video size={18} /> : <EyeOff size={18} />}
+                    <span className="text-[11px] font-medium whitespace-nowrap">
+                      {videoWindowVisible ? tr('Video Window') : tr('Restore Video Window')}
+                    </span>
                   </button>
                   <div className="flex items-center gap-1">
                     <label className={`p-2 rounded-lg hover:bg-white/10 cursor-pointer transition-colors ${lyrics.length > 0 ? 'text-amber-400' : 'text-zinc-400 hover:text-white'}`} title={tr('Load Lyrics (.lrc, .srt, .vtt, .ttml) (2)')}>
@@ -5116,7 +5168,7 @@ function App() {
                       title={`${tr('Lyric Visibility')}: ${tr((renderConfig.lyricVisibilityMode ?? 'default') === 'auto' ? 'Auto' : 'Default')}`}
                       disabled={isRendering}
                     >
-                      {(renderConfig.lyricVisibilityMode ?? 'default') === 'auto' ? 'AUTO' : 'DEFAULT'}
+                      {(renderConfig.lyricVisibilityMode ?? 'default') === 'auto' ? tr('AUTO') : tr('DEFAULT')}
                     </button>
                     {/* Background Blur Toggle */}
                     <button
@@ -5125,7 +5177,7 @@ function App() {
                       title={`${tr('Background Blur')}: ${tr(isBlurEnabled ? 'On' : 'Off')}`}
                       disabled={isRendering}
                     >
-                      {isBlurEnabled ? 'BLUR' : 'SHARP'}
+                      {isBlurEnabled ? tr('BLUR') : tr('SHARP')}
                     </button>
                     {/* Highlight Toggle */}
                     <button
@@ -5440,6 +5492,7 @@ function App() {
                     <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Toggle Header Info')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">I</span></div>
                     <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Toggle Shortcut Info')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">K</span></div>
                     <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Toggle Player')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">Y</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Toggle Video Window')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">W</span></div>
                     <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Lyric Visibility: Default / Auto')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">Q</span></div>
                     <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('UI Scale (Zoom / Reset)')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">8 / 9 / 0</span></div>
                   </div>

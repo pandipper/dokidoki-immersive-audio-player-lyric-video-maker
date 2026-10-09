@@ -6,6 +6,11 @@ import { useUI } from '../contexts/UIContext';
 import { transcribeAudio } from '../services/geminiService';
 import { extractEmbeddedLyrics } from '../utils/embeddedLyrics';
 
+import { translate, loadLang } from '../locales';
+
+/** 模块级翻译：面板里有数百个文案调用点，用 hook 会把签名改得到处都是，这里直接读缓存语言。 */
+const t = (s: string) => translate(s, loadLang());
+
 interface PlaylistEditorProps {
     playlist: PlaylistItem[];
     setPlaylist: React.Dispatch<React.SetStateAction<PlaylistItem[]>>;
@@ -228,15 +233,17 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
         const newItems: PlaylistItem[] = [];
 
 
-        const extractMetadata = async (file: File, fallbackTitle: string): Promise<{ metadata: {title: string; artist: string; album?: string; coverUrl: string | null; backgroundType?: 'image' | 'video'}, embeddedLyrics?: string }> => {
+        const extractMetadata = async (file: File, fallbackTitle: string): Promise<{ metadata: {title: string; artist: string; album?: string; coverUrl: string | null}, embeddedLyrics?: string }> => {
             return new Promise((resolve) => {
                 if (file.type.startsWith('video/')) {
+                    // 视频只作为播放源（画面由悬浮小窗显示），
+                    // 不再写进 coverUrl / backgroundType:'video'，
+                    // 否则主画面背景会被这条视频替换并全屏播放。与拖放载入路径保持一致。
                     resolve({
                         metadata: {
                             title: fallbackTitle,
                             artist: 'Unknown Artist',
-                            coverUrl: URL.createObjectURL(file),
-                            backgroundType: 'video'
+                            coverUrl: null
                         }
                     });
                     return;
@@ -1297,7 +1304,7 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-zinc-900/90 backdrop-blur-sm pointer-events-none">
                     <div className="flex flex-col items-center gap-4 text-orange-500 animate-pulse">
                         <Upload size={48} />
-                        <h3 className="text-xl font-bold">Drop Audio & Lyrics Here</h3>
+                        <h3 className="text-xl font-bold">{t('Drop Audio & Lyrics Here')}</h3>
                         <p className="text-sm text-zinc-400">Supported formats: MP3, WAV, FLAC, Video (MP4/WebM), LRC, SRT, VTT</p>
                     </div>
                 </div>
@@ -1316,15 +1323,15 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                 <div className="flex items-center gap-4 flex-1 min-w-0 overflow-x-auto no-scrollbar pr-4">
                     <h2 className="text-sm font-bold flex items-center gap-2 text-zinc-300 whitespace-nowrap">
                         <ListMusic size={16} className="text-orange-400" />
-                        Playlist
+                        {t('Playlist')}
                     </h2>
                     <div className="w-px h-4 bg-zinc-700"></div>
                     <div className="flex bg-orange-600 rounded overflow-hidden">
                         <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-500 cursor-pointer transition-colors text-white text-xs font-medium whitespace-nowrap border-r border-orange-700">
-                            <Plus size={14} /> Add Files
+                            <Plus size={14} /> {t('Add Files')}
                             <input type="file" name="add-files" id="add-files" className="hidden" accept="audio/*,video/*,.lrc,.srt,.ttml,.xml,.vtt" multiple onChange={handleFileUpload} />
                         </label>
-                        <label className="flex items-center gap-2 px-2 py-1 hover:bg-orange-500 cursor-pointer transition-colors text-white text-xs whitespace-nowrap" title="Add Folder">
+                        <label className="flex items-center gap-2 px-2 py-1 hover:bg-orange-500 cursor-pointer transition-colors text-white text-xs whitespace-nowrap" title={t('Add Folder')}>
                             <Folder size={14} />
                             <input type="file" name="add-folder" id="add-folder" className="hidden" multiple {...({ webkitdirectory: "" } as any)} onChange={handleFileUpload} />
                         </label>
@@ -1363,7 +1370,7 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                         <button
                             onClick={() => handleSort('random')}
                             className={`p-1 rounded transition-colors ${sortConfig.key === 'random' ? 'bg-zinc-700 text-white' : 'hover:bg-zinc-700 text-zinc-400 hover:text-white'}`}
-                            title="Shuffle"
+                            title={t('Shuffle')}
                         >
                             <Shuffle size={14} />
                         </button>
@@ -1375,7 +1382,7 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                         <button
                             onClick={() => setShowApiKeyInput(!showApiKeyInput)}
                             className={`p-1 rounded transition-colors ${showApiKeyInput ? 'text-orange-400' : 'text-zinc-500 hover:text-zinc-300'}`}
-                            title="Gemini API Key"
+                            title={t('Gemini API Key')}
                         >
                             <Key size={14} />
                         </button>
@@ -1383,10 +1390,10 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                             <input
                                 type={apiKey ? "password" : "text"}
                                 name="api-key"
-                                aria-label="Gemini API Key"
+                                aria-label={t('Gemini API Key')}
                                 value={apiKey}
                                 onChange={(e) => setApiKey(e.target.value)}
-                                placeholder="Paste API Key here"
+                                placeholder={t('Paste API Key here')}
                                 className="bg-transparent border-none outline-none text-xs text-zinc-200 w-32 placeholder:text-zinc-600"
                                 autoFocus
                                 autoComplete="off"
@@ -1401,10 +1408,10 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                             value={selectedModel}
                             onChange={(e) => setSelectedModel(e.target.value)}
                             className="bg-zinc-800 text-[10px] text-zinc-300 border border-zinc-700 rounded px-1 py-1 focus:outline-none focus:border-orange-500 appearance-none cursor-pointer hover:bg-zinc-700"
-                            title="Select Gemini Model"
+                            title={t('Select Gemini Model')}
                             name="gemini-model"
                             id="gemini-model"
-                            aria-label="Gemini Model"
+                            aria-label={t('Gemini Model')}
                         >
                             <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                             <option value="gemini-3-flash-preview">Gemini 3.0 Flash Preview</option>
@@ -1417,20 +1424,20 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                             value={transcriptionGranularity}
                             onChange={(e) => setTranscriptionGranularity(e.target.value as 'word' | 'line')}
                             className="bg-zinc-800 text-[10px] text-zinc-300 border border-zinc-700 rounded px-1 py-1 focus:outline-none focus:border-orange-500 appearance-none cursor-pointer hover:bg-zinc-700 w-[60px]"
-                            title="Transcription Mode (Line or Word Level)"
+                            title={t('Transcription Mode (Line or Word Level)')}
                             name="transcription-mode"
                             id="transcription-mode"
-                            aria-label="Transcription Mode"
+                            aria-label={t('Transcription Mode')}
                         >
-                            <option value="line">Line</option>
-                            <option value="word">Word</option>
+                            <option value="line">{t('Line')}</option>
+                            <option value="word">{t('Word')}</option>
                         </select>
                     </div>
 
                     <button
                         onClick={exportPlaylist}
                         className="p-1 hover:bg-zinc-700 text-zinc-500 hover:text-white rounded transition-colors"
-                        title="Export Playlist (.m3u8)"
+                        title={t('Export Playlist (.m3u8)')}
                     >
                         <FileDown size={14} />
                     </button>
@@ -1442,7 +1449,7 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                             }
                         }}
                         className="p-1 hover:bg-red-900/50 text-zinc-500 hover:text-red-200 rounded transition-colors"
-                        title="Clear Playlist"
+                        title={t('Clear Playlist')}
                     >
                         <Trash2 size={14} />
                     </button>
@@ -1451,7 +1458,7 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                     <button
                         onClick={onClose}
                         className="p-1 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded transition-colors"
-                        title="Close Playlist"
+                        title={t('Close Playlist')}
                     >
                         <X size={14} />
                     </button>
@@ -1463,7 +1470,7 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                 {playlist.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-xs">
                         <ListMusic size={32} className="mb-2 opacity-50" />
-                        <p>Playlist is empty</p>
+                        <p>{t('Playlist is empty')}</p>
                         <p className="opacity-50">Add audio files (matches .lrc/.srt/.ttml by name)</p>
                     </div>
                 ) : (
@@ -1538,9 +1545,9 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                                             </div>
                                             <div
                                                 className="text-[9px] text-zinc-500 truncate"
-                                                title={item.metadata.artist}
+                                                title={t(item.metadata.artist)}
                                             >
-                                                {item.metadata.artist}
+                                                {t(item.metadata.artist)}
                                             </div>
                                         </div>
                                     </div>
@@ -1561,7 +1568,7 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                                                 </span>
                                             </div>
                                         ) : (
-                                            <span className="text-[8px] text-zinc-700 italic">No Lyrics</span>
+                                            <span className="text-[8px] text-zinc-700 italic">{t('No Lyrics')}</span>
                                         )}
                                     </div>
                                 </div>
@@ -1606,7 +1613,7 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                                         </div>
                                     ) : (
                                         <div className="h-full flex items-center justify-center text-zinc-700 text-[9px] italic">
-                                            No lyric timeline
+                                            {t('No lyric timeline')}
                                         </div>
                                     )}
                                 </div>
@@ -1616,7 +1623,7 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handleReloadEmbeddedLyrics(item); }}
                                             className="p-1.5 rounded bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-700/50 transition-colors"
-                                            title="Reload Embedded Lyrics"
+                                            title={t('Reload Embedded Lyrics')}
                                         >
                                             <RotateCcw size={14} />
                                         </button>
@@ -1629,14 +1636,14 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                                             lyricFileInputRef.current?.click();
                                         }}
                                         className="p-1.5 rounded bg-blue-900/30 border border-blue-500/30 text-blue-400 hover:bg-blue-800/50 transition-colors"
-                                        title="Load Lyrics Manually"
+                                        title={t('Load Lyrics Manually')}
                                     >
                                         <Upload size={14} />
                                     </button>
                                     <button
                                         onClick={(e) => { e.stopPropagation(); handleSearchLyrics(item); }}
                                         className={`group/btn relative p-1.5 rounded bg-cyan-900/30 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-800/50 transition-colors ${searchingIds.has(item.id) ? 'animate-pulse' : ''}`}
-                                        title="Search Lyrics (Online)"
+                                        title={t('Search Lyrics (Online)')}
                                         disabled={searchingIds.has(item.id)}
                                     >
                                         {searchingIds.has(item.id) ? (
@@ -1647,7 +1654,7 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                                     </button>
                                     <button
                                         onClick={(e) => { e.stopPropagation(); handleTranscribe(item); }}
-                                        className={`group/btn relative p-1.5 rounded bg-purple-900/30 border border-purple-500/30 text-purple-400 hover:bg-purple-800/50 transition-colors ${transcribingIds.has(item.id) ? 'text-red-400 border-red-500/50 hover:bg-red-900/30' : ''}`}
+                                        className={`group/btn relative p-1.5 rounded bg-amber-900/30 border border-amber-400/30 text-amber-300 hover:bg-amber-800/50 transition-colors ${transcribingIds.has(item.id) ? 'text-red-400 border-red-500/50 hover:bg-red-900/30' : ''}`}
                                         title={transcribingIds.has(item.id) ? "Stop Transcription" : "AI Sync Transcribe"}
                                     >
                                         {transcribingIds.has(item.id) ? (
@@ -1662,15 +1669,15 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
 
                                     {lyrics.length > 0 && (
                                         <div className="flex items-center gap-0.5 bg-zinc-800/50 rounded p-0.5 border border-zinc-700/50">
-                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'txt'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title="Download TXT">TXT</button>
-                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'lrc'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title="Download LRC">LRC</button>
-                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'lrc-enhanced'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title="Download Enhanced LRC (Word Level)">eLRC</button>
-                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'srt'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title="Download SRT">SRT</button>
-                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'vtt'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title="Download VTT">VTT</button>
-                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'ttml'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title="Download TTML">TTML</button>
-                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'json'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title="Download JSON">JSON</button>
+                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'txt'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title={t('Download TXT')}>TXT</button>
+                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'lrc'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title={t('Download LRC')}>LRC</button>
+                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'lrc-enhanced'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title={t('Download Enhanced LRC (Word Level)')}>eLRC</button>
+                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'srt'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title={t('Download SRT')}>SRT</button>
+                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'vtt'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title={t('Download VTT')}>VTT</button>
+                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'ttml'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title={t('Download TTML')}>TTML</button>
+                                            <button onClick={(e) => { e.stopPropagation(); exportLyrics(item, 'json'); }} className="p-1 hover:bg-white/10 rounded text-[8px] text-zinc-400 font-bold" title={t('Download JSON')}>JSON</button>
                                             <div className="w-px h-3 bg-zinc-700 mx-0.5"></div>
-                                            <button onClick={(e) => { e.stopPropagation(); handleClearLyrics(item); }} className="p-1 hover:bg-red-900/50 rounded text-[8px] text-red-500 hover:text-red-300 font-bold" title="Clear Lyrics">CLR</button>
+                                            <button onClick={(e) => { e.stopPropagation(); handleClearLyrics(item); }} className="p-1 hover:bg-red-900/50 rounded text-[8px] text-red-500 hover:text-red-300 font-bold" title={t('Clear Lyrics')}>{t('CLR')}</button>
                                         </div>
                                     )}
                                 </div>
@@ -1679,7 +1686,7 @@ const PlaylistEditor: React.FC<PlaylistEditorProps> = ({ playlist, setPlaylist, 
                                 <button
                                     onClick={(e) => { e.stopPropagation(); removeTrack(idx); }}
                                     className="p-1 text-zinc-600 hover:text-red-400 hover:bg-red-900/20 rounded self-start"
-                                    title="Remove Track"
+                                    title={t('Remove Track')}
                                 >
                                     <Trash2 size={12} />
                                 </button>

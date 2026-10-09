@@ -4,6 +4,11 @@ import { Plus, X, ImageIcon, GripHorizontal, ZoomIn, ZoomOut, Trash2, Volume2, V
 import { formatTime } from '../utils/parsers';
 import { useUI } from '../contexts/UIContext';
 
+import { translate, loadLang } from '../locales';
+
+/** 模块级翻译：面板里有数百个文案调用点，用 hook 会把签名改得到处都是，这里直接读缓存语言。 */
+const t = (s: string) => translate(s, loadLang());
+
 interface VisualEditorProps {
   slides: VisualSlide[];
   setSlides: React.Dispatch<React.SetStateAction<VisualSlide[]>>;
@@ -118,7 +123,7 @@ const SpeedInput: React.FC<SpeedInputProps> = ({ value, onChange }) => {
       <input
         type="text"
         name="speed-input"
-        aria-label="Speed Input"
+        aria-label={t('Speed Input')}
         className="bg-transparent text-[10px] text-zinc-300 focus:outline-none w-10 text-center"
         value={localValue}
         onChange={(e) => {
@@ -1115,22 +1120,22 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
       <div className="p-2 border-b border-white/10 flex items-center justify-between bg-zinc-900 z-30 shrink-0 h-12">
         <div className="flex items-center gap-4 flex-1 min-w-0 overflow-x-auto no-scrollbar pr-4">
           <h2 className="text-sm font-bold flex items-center gap-2 text-zinc-300 whitespace-nowrap">
-            <Film size={16} className="text-purple-400" />
+            <Film size={16} className="text-amber-300" />
 
-            Timeline
+            {t('Timeline')}
           </h2>
           <div className="w-px h-4 bg-zinc-700"></div>
-          <label className="flex items-center gap-2 px-3 py-1 bg-purple-600 hover:bg-purple-500 rounded text-xs font-medium cursor-pointer transition-colors text-white whitespace-nowrap">
-            <Plus size={14} /> Import Media
+          <label className="flex items-center gap-2 px-3 py-1 bg-amber-500 hover:bg-amber-400 rounded text-xs font-medium cursor-pointer transition-colors text-black whitespace-nowrap">
+            <Plus size={14} /> {t('Import Media')}
             <input type="file" name="import-media" id="import-media" className="hidden" accept="image/*,video/*,audio/*" multiple onChange={handleFileUpload} />
           </label>
           <div className="w-px h-4 bg-zinc-700"></div>
           <div className="flex items-center gap-1">
-            <button onClick={handleZoomOut} className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white" title="Zoom Out">
+            <button onClick={handleZoomOut} className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white" title={t('Zoom Out')}>
               <ZoomOut size={14} />
             </button>
             <div className="text-[10px] text-zinc-500 font-mono min-w-[50px] text-center">{pxPerSec}px/s</div>
-            <button onClick={handleZoomIn} className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white" title="Zoom In">
+            <button onClick={handleZoomIn} className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white" title={t('Zoom In')}>
               <ZoomIn size={14} />
             </button>
           </div>
@@ -1142,7 +1147,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
               onClick={handleUndo}
               disabled={!canUndo}
               className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Undo (Ctrl+Z)"
+              title={t('Undo (Ctrl+Z)')}
             >
               <Undo2 size={14} />
             </button>
@@ -1150,7 +1155,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
               onClick={handleRedo}
               disabled={!canRedo}
               className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Redo (Ctrl+Y)"
+              title={t('Redo (Ctrl+Y)')}
             >
               <Redo2 size={14} />
             </button>
@@ -1163,7 +1168,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
               onClick={handleCopy}
               disabled={selectedSlideIds.length === 0}
               className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Copy (Ctrl+C)"
+              title={t('Copy (Ctrl+C)')}
             >
               <Copy size={14} />
             </button>
@@ -1171,7 +1176,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
               onClick={handleCut}
               disabled={selectedSlideIds.length === 0}
               className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Cut (Ctrl+X)"
+              title={t('Cut (Ctrl+X)')}
             >
               <Scissors size={14} />
             </button>
@@ -1179,7 +1184,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
               onClick={handlePaste}
               disabled={clipboard.length === 0}
               className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Paste (Ctrl+V)"
+              title={t('Paste (Ctrl+V)')}
             >
               <Clipboard size={14} />
             </button>
@@ -1192,7 +1197,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
               onClick={handleSplit}
               disabled={selectedSlideIds.length === 0}
               className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Split Content (X)"
+              title={t('Split Content (X)')}
             >
               <Split size={14} />
             </button>
@@ -1211,18 +1216,18 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
               }}
               className="px-2 py-0.5 text-[10px] bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-300 transition-colors"
             >
-              Select All
+              {t('Select All')}
             </button>
 
             {/* Duration Input (Single Selection Only) */}
             {selectedSlideIds.length === 1 && (
               <div className="flex items-center gap-1 bg-zinc-800 rounded px-1 border border-zinc-700">
-                <span className="text-[10px] text-zinc-500 px-1">Dur:</span>
+                <span className="text-[10px] text-zinc-500 px-1">{t('Dur:')}</span>
                 <input
                   key={selectedSlideIds[0]}
                   type="text"
                   name="duration-input"
-                  aria-label="Slide Duration"
+                  aria-label={t('Slide Duration')}
                   className="w-12 bg-transparent text-[10px] text-white font-mono focus:outline-none py-0.5 text-center"
                   placeholder="MM:SS"
                   defaultValue={(() => {
@@ -1263,7 +1268,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
                 return (
                   <>
                     <div className="flex items-center gap-2 bg-zinc-800 rounded px-2 border border-zinc-700 h-[22px]">
-                      <span className="text-[10px] text-zinc-500">Vol:</span>
+                      <span className="text-[10px] text-zinc-500">{t('Vol:')}</span>
                       <div className="flex items-center gap-1 w-20">
                         <button
                           onClick={() => {
@@ -1283,7 +1288,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
                           max="1"
                           step="0.05"
                           name="volume-input"
-                          aria-label="Volume Level"
+                          aria-label={t('Volume Level')}
                           className="w-full h-1 bg-zinc-600 rounded-lg appearance-none cursor-pointer"
                           value={s.volume !== undefined ? s.volume : 1}
                           onChange={(e) => {
@@ -1300,7 +1305,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="text-[10px] text-zinc-500">Spd:</span>
+                      <span className="text-[10px] text-zinc-500">{t('Spd:')}</span>
                       <SpeedInput
                         value={s.playbackRate || 1}
                         onChange={(newRate) => {
@@ -1330,7 +1335,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
           <button
             onClick={handleClearAll}
             className="p-1 hover:bg-red-900/50 text-zinc-500 hover:text-red-200 rounded transition-colors"
-            title="Clear All Slides"
+            title={t('Clear All Slides')}
           >
             <Trash2 size={14} />
           </button>
@@ -1339,7 +1344,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
           <button
             onClick={onClose}
             className="p-1 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded transition-colors"
-            title="Close Timeline"
+            title={t('Close Timeline')}
           >
             <X size={14} />
           </button>
@@ -1372,7 +1377,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
           {/* Selection Box */}
           {selectionBox && (
             <div
-              className="absolute border border-purple-500 bg-purple-500/20 z-50 pointer-events-none"
+              className="absolute border border-amber-400 bg-amber-400/20 z-50 pointer-events-none"
               style={{
                 left: selectionBox.x,
                 top: selectionBox.y,
@@ -1409,7 +1414,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
                 className="absolute top-0 bottom-0 border-l-2 border-red-900/50 flex flex-col justify-end z-0"
                 style={{ left: duration * pxPerSec }}
               >
-                <span className="text-[9px] text-red-900/50 bg-black/50 px-1 whitespace-nowrap">End</span>
+                <span className="text-[9px] text-red-900/50 bg-black/50 px-1 whitespace-nowrap">{t('End')}</span>
               </div>
             )}
           </div>
@@ -1421,7 +1426,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
           >
             {/* Corner Box */}
             <div className="w-[96px] shrink-0 border-r border-white/10 flex items-center justify-center text-[10px] text-zinc-500 bg-zinc-900/90">
-              Time
+              {t('Time')}
             </div>
             {/* Ruler Ticks Container */}
             <div className="relative flex-1">
@@ -1462,7 +1467,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
 
             {/* Sticky Header */}
             <div className="sticky left-0 w-[96px] h-full bg-zinc-900/90 border-r border-white/10 z-30 flex items-center justify-between px-2 text-[10px] text-zinc-400 backdrop-blur-sm">
-              <span>Visual 1</span>
+              <span>{t('Visual 1')}</span>
               <button
                 onClick={(e) => { e.stopPropagation(); toggleLayerVisibility('visual', 0); }}
                 className="p-1 hover:text-white hover:bg-zinc-700 rounded transition-colors"
@@ -1480,7 +1485,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
                     width: Math.max(10, (slide.endTime - slide.startTime) * pxPerSec)
                   }}
                   className={`absolute top-1 bottom-1 rounded-md overflow-hidden group bg-zinc-800 border shadow-sm select-none cursor-move
-                      ${(activeDrag?.id === slide.id || selectedSlideIds.includes(slide.id)) ? 'border-purple-400 z-30 shadow-xl opacity-90' : 'border-zinc-600 hover:border-zinc-400 z-10 hover:z-20'}
+                      ${(activeDrag?.id === slide.id || selectedSlideIds.includes(slide.id)) ? 'border-amber-300 z-30 shadow-xl opacity-90' : 'border-zinc-600 hover:border-zinc-400 z-10 hover:z-20'}
                       ${selectedSlideIds.includes(slide.id) ? 'ring-2 ring-blue-500/70 ring-offset-1 ring-offset-zinc-950' : ''}
                     `}
                   onMouseDown={(e) => handleMouseDown(e, slide.id, 'move')}
@@ -1518,7 +1523,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
                           }));
                         }}
                         className="absolute top-1 left-12 p-0.5 bg-black/60 hover:bg-zinc-600 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-40"
-                        title="Reset to Original Duration"
+                        title={t('Reset to Original Duration')}
                       >
                         <RotateCcw size={10} />
                       </button>
@@ -1551,7 +1556,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
 
                   {/* Resize Handle (Left Edge) */}
                   <div
-                    className="absolute top-0 bottom-0 left-0 w-3 cursor-w-resize flex items-center justify-center bg-black/20 hover:bg-purple-500/80 transition-colors z-20"
+                    className="absolute top-0 bottom-0 left-0 w-3 cursor-w-resize flex items-center justify-center bg-black/20 hover:bg-amber-400/80 transition-colors z-20"
                     onMouseDown={(e) => handleMouseDown(e, slide.id, 'resize-start')}
                   >
                     <GripHorizontal size={10} className="text-white/70 rotate-90" />
@@ -1559,7 +1564,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
 
                   {/* Resize Handle (Right Edge) */}
                   <div
-                    className="absolute top-0 bottom-0 right-0 w-3 cursor-e-resize flex items-center justify-center bg-black/20 hover:bg-purple-500/80 transition-colors z-20"
+                    className="absolute top-0 bottom-0 right-0 w-3 cursor-e-resize flex items-center justify-center bg-black/20 hover:bg-amber-400/80 transition-colors z-20"
                     onMouseDown={(e) => handleMouseDown(e, slide.id, 'resize-end')}
                   >
                     <GripHorizontal size={10} className="text-white/70 rotate-90" />
@@ -1575,7 +1580,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
 
             {/* Sticky Header */}
             <div className="sticky left-0 w-[96px] h-full bg-zinc-900/90 border-r border-white/10 z-30 flex items-center justify-between px-2 text-[10px] text-zinc-400 backdrop-blur-sm">
-              <span>Visual 2</span>
+              <span>{t('Visual 2')}</span>
               <button
                 onClick={(e) => { e.stopPropagation(); toggleLayerVisibility('visual', 1); }}
                 className="p-1 hover:text-white hover:bg-zinc-700 rounded transition-colors"
@@ -1593,7 +1598,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
                     width: Math.max(10, (slide.endTime - slide.startTime) * pxPerSec)
                   }}
                   className={`absolute top-1 bottom-1 rounded-md overflow-hidden group bg-zinc-800 border shadow-sm select-none cursor-move
-                     ${(activeDrag?.id === slide.id || selectedSlideIds.includes(slide.id)) ? 'border-purple-400 z-30 shadow-xl opacity-90' : 'border-zinc-600 hover:border-zinc-400 z-10 hover:z-20'}
+                     ${(activeDrag?.id === slide.id || selectedSlideIds.includes(slide.id)) ? 'border-amber-300 z-30 shadow-xl opacity-90' : 'border-zinc-600 hover:border-zinc-400 z-10 hover:z-20'}
                      ${selectedSlideIds.includes(slide.id) ? 'ring-2 ring-blue-500/70 ring-offset-1 ring-offset-zinc-950' : ''}
                    `}
                   onMouseDown={(e) => handleMouseDown(e, slide.id, 'move')}
@@ -1627,7 +1632,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
                           }));
                         }}
                         className="absolute top-1 left-12 p-0.5 bg-black/60 hover:bg-zinc-600 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-40"
-                        title="Reset to Original Duration"
+                        title={t('Reset to Original Duration')}
                       >
                         <RotateCcw size={10} />
                       </button>
@@ -1653,13 +1658,13 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
                     <X size={10} />
                   </button>
                   <div
-                    className="absolute top-0 bottom-0 left-0 w-3 cursor-w-resize flex items-center justify-center bg-black/20 hover:bg-purple-500/80 transition-colors z-20"
+                    className="absolute top-0 bottom-0 left-0 w-3 cursor-w-resize flex items-center justify-center bg-black/20 hover:bg-amber-400/80 transition-colors z-20"
                     onMouseDown={(e) => handleMouseDown(e, slide.id, 'resize-start')}
                   >
                     <GripHorizontal size={10} className="text-white/70 rotate-90" />
                   </div>
                   <div
-                    className="absolute top-0 bottom-0 right-0 w-3 cursor-e-resize flex items-center justify-center bg-black/20 hover:bg-purple-500/80 transition-colors z-20"
+                    className="absolute top-0 bottom-0 right-0 w-3 cursor-e-resize flex items-center justify-center bg-black/20 hover:bg-amber-400/80 transition-colors z-20"
                     onMouseDown={(e) => handleMouseDown(e, slide.id, 'resize-end')}
                   >
                     <GripHorizontal size={10} className="text-white/70 rotate-90" />
@@ -1672,7 +1677,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
           {/* 5. Lyrics Track */}
           <div className="absolute left-0 right-0 overflow-hidden" style={{ top: TRACK_LAYOUT.LYRICS_TOP, height: TRACK_LAYOUT.LYRICS_HEIGHT }}>
             <div className="sticky left-0 w-[96px] h-full bg-zinc-900/90 border-r border-white/10 z-30 flex items-center px-2 text-[10px] text-zinc-400 backdrop-blur-sm select-none">
-              <span>Lyrics</span>
+              <span>{t('Lyrics')}</span>
             </div>
 
             {/* Content */}
@@ -1700,7 +1705,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
 
             {/* Sticky Header */}
             <div className="sticky left-0 w-[96px] h-full bg-zinc-900/90 border-r border-white/10 z-30 flex items-center justify-between px-2 text-[10px] text-zinc-400 backdrop-blur-sm">
-              <span>Audio 1</span>
+              <span>{t('Audio 1')}</span>
               <button
                 onClick={(e) => { e.stopPropagation(); toggleLayerVisibility('audio', 0); }}
                 className="p-1 hover:text-white hover:bg-zinc-700 rounded transition-colors"
@@ -1773,7 +1778,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ slides, setSlides, currentT
 
             {/* Sticky Header */}
             <div className="sticky left-0 w-[96px] h-full bg-zinc-900/90 border-r border-white/10 z-30 flex items-center justify-between px-2 text-[10px] text-zinc-400 backdrop-blur-sm">
-              <span>Audio 2</span>
+              <span>{t('Audio 2')}</span>
               <button
                 onClick={(e) => { e.stopPropagation(); toggleLayerVisibility('audio', 1); }}
                 className="p-1 hover:text-white hover:bg-zinc-700 rounded transition-colors"
