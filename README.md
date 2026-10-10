@@ -95,7 +95,16 @@ python offline/准备 Cloudflare 产物.py     # 生成 dist-cf/，剔除 ffmpeg
 npx wrangler pages deploy dist-cf --project-name=dokidoki --branch=main
 ```
 
-剔掉之后 FFmpeg 引擎**照样能用**：`utils/ffmpegRenderer.ts` 会依次探测本地 `/ffmpeg/ffmpeg-core.{js,wasm,worker.js}`，三个全失败才回落到 unpkg CDN。所以托管版首次用 FFmpeg 引擎会从 CDN 拉一次 31 MB（之后走浏览器缓存），其余功能完全不受影响。
+第一次要先 `npx wrangler login` 走一次浏览器授权，凭据会存在本地（Windows 在
+`%APPDATA%\xdg.config\.wrangler\config\default.toml`），之后不用再登。
+
+剔掉之后 FFmpeg 引擎**照样能用**：`utils/ffmpegRenderer.ts` 会依次探测本地
+`/ffmpeg/ffmpeg-core.{js,wasm,worker.js}`，三个全失败才回落到 unpkg CDN。所以托管版首次用 FFmpeg 引擎会从 CDN 拉一次 31 MB（之后走浏览器缓存），其余功能完全不受影响。
+
+> 这里有个坑值得记一笔：Cloudflare Pages 对不存在的路径会**返回 200 + `index.html`**（不是 404），
+> 所以 `/ffmpeg/ffmpeg-core.wasm` 拿到的是 687 字节的 HTML 而不是报错。
+> 好在 `loadLocalAsset()` 里有两道校验 —— 首字节是 `<` 或 `Content-Type` 含 `text/html` 就判定为
+> SPA 回退并抛错，`.wasm` 还要过 `\0asm` 魔数。所以它能正确失败并回落 CDN，而不是把 HTML 当 wasm 用。
 
 要是想连这 31 MB 也放本地、托管后一点网络都不依赖，那就用 Netlify 或 Vercel —— 它们没有单文件上限，直接部署整个 `dist/` 就行。
 
