@@ -14,6 +14,10 @@
 
 ## 怎么用
 
+想先看看长什么样：上游作者部署了在线版 —— [**Vercel**](https://immersiveaudioplayer.vercel.app/)（功能完整）。
+上游还有一个 [GitHub Pages](https://dotslashgabut.github.io/audioplayer/) 版，但 GitHub Pages 不能自定义响应头，
+拿不到 `SharedArrayBuffer`，FFmpeg 渲染引擎在那边用不了，只适合看界面。
+
 ### 离线包（推荐）
 
 到 [Releases](../../releases) 下载 `dokidoki-offline.zip`，解压到任意位置，双击 `启动 dokidoki.cmd`。浏览器会自动打开 `http://localhost:3000/`。用完关掉那个命令行窗口就停了。
