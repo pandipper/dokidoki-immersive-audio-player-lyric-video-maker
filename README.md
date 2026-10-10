@@ -1,338 +1,151 @@
 <div align="center">
-  <img src="public/icon.svg" width="100" />
-  <h1>Immersive Audio Player & Lyric Video Maker</h1>
-  <p><b>Version 2.3.18</b></p>
+  <img src="public/icon.svg" width="88" />
+  <h1>dokidoki 字幕播放器</h1>
+  <p>字幕是主角，视频是配角。</p>
 </div>
 
-**Immersive Audio Player & Lyric Video Maker** is a powerful all-in-one web tool designed for music lovers and content creators. It combines a distraction-free audio player with a professional-grade timeline editor, allowing you to create stunning, synchronized lyric videos directly in your browser. Whether you want to enjoy your local music library with beautiful visuals or create viral content for TikTok, Instagram, and YouTube, this app delivers high-quality results without watermarks or server uploads.
+为「**音频播客 / 无背景音乐的视频 + 字幕**」这个场景改的本地播放器。字幕占满主画面，视频缩在左侧小窗里，可以随时调出整条字幕文稿跳转。
 
-**Online version** : via [**GitHub Page**](https://dotslashgabut.github.io/audioplayer/) | [**Vercel**](https://immersiveaudioplayer.vercel.app) | [**Netlify**](https://immersiveaudioplayer.netlify.app) | [**Huggingface Space**](https://huggingface.co/spaces/DotSlashGabut/lyric-video-maker)
+底子是 [dotslashgabut/immersive-audio-player-lyric-video-maker](https://github.com/dotslashgabut/immersive-audio-player-lyric-video-maker)（v2.3.18），在它上面改造，不是重写。
 
-![Immersive Audio Player Main Screen](screenshot-main-page.jpg)
-
-![Immersive Audio Player Main Screen](screenshot-minimal-mode.jpg)
-
-## Key Features
-
-### 🎧 Advanced Audio Player & Playlist
-- **Workspace Drag & Drop**: Drag & drop files directly onto the main player workspace to load them instantly. Displays a beautiful visual backdrop overlay for supported formats during drag operations.
-- **Smart Playlist**: Drag & drop multiple files. Automatically groups audio/video files with matching lyric files (`.lrc`, `.srt`, `.vtt`, `.ttml`, `.xml`) based on filename.
-- **Broad Audio Format Support**: Handles **MP3**, **M4A/ALAC**, **FLAC**, **OGG Vorbis**, **OPUS**, **WAV**, and video files. Automatically extracts embedded metadata (title, artist, cover art) and **embedded lyrics** from all supported formats.
-- **Interactive Lyric Timeline**: Each playlist item shows a mini-timeline of lyrics. Click any line to play that specific track starting from that time.
-- **Sorting & Management**: Sort by Filename, Artist, Title, Album (Ascending/Descending), or Shuffle.
-- **Repeat Modes**: Cycle between **Off**, **Repeat One**, **Play All** (Play playlist once), and **Repeat All** (Loop playlist).
-- **Immersive Mode**: UI controls automatically fade out when idle for a distraction-free experience.
-- **Minimal Mode Interaction**: Double-click or double-tap anywhere on the screen to quickly exit Minimal Mode.
-- **Smart Play/Pause**: Clicking the active track in the playlist toggles Play/Pause.
-- **Unified Uploads**: Audio files and lyrics uploaded from the main interface are instantly auto-synced to your active playlist queue.
-- **Auto-Load**: Automatically cues the first track for playback when adding new audio files.
-- **Export Playlist**: Export your current playlist to `.m3u8` format.
-
-![Playlist Management](screenshot-playlist.jpg)
-
-### 📝 Synchronized Lyrics
-- **Multi-Format Support**: Compatible with `.lrc` (Standard & Enhanced with **newline support**), `.srt` (Subtitle style), **`.vtt` (WebVTT with Word-Level timestamps)**, and **`.ttml` / `.xml`** (Word-level precision).
-- **Auto-Scroll & Centering**: Lyrics scroll automatically and active lines are perfectly centered.
-- **Lyric Offset Control**: Fine-tune sync issues with **+0.1s / -0.1s** buttons directly in the player.
-- **Click-to-Seek & Copy**: Click any lyric line to instantly jump to that exact time. **Click the active line** to copy its text to the clipboard.
-- **Adjustable Font Size**: Use **+** / **-** hotkeys to adjust lyric size on the fly.
-- **Visual Presets**: Choose from a wide variety of display styles:
-  - **Standard**: Default, Big Text, Big Text (UP), Big Center (UP).
-  - **Thematic**: Metal, Kids, Sad, Romantic, Tech, Gothic, Classic Serif, Monospace.
-  - **Social**: 
-    - **One Line / One Line (UP)**: Minimalist single-line display (Modern TikTok/Reels style).
-    - **Slideshow**: Minimalist line-by-line.
-    - **Subtitle**: Cinematic bottom-centered text (No song metadata).
-    - **Just Video**: Hides text content.
-    - **None**: Hides everything (Lyrics, Titles, and Metadata).
-  - **Karaoke Styles**: **Neon**, **Glow**, **Bounce**, **Wave**, and **Color/Shape** highlights (Pill, Box, Rounded) with **customizable colors**. Extended with 20+ new word-level effects: **Scale**, **Underline**, **Outline**, **Shadow**, **Gradient**, **Glass**, **Neon Multi**, **Soft Glow**, **3D**, **Emboss**, **Chrome**, **Gold**, **Fire**, **Frozen**, **Rainbow**, **Mirror**, **VHS**, **Retro**, **Cyberpunk**, **Hologram**, **Comic**, **Glitch Text**, **Pulse**, **Breathe**, and **Float**.
-  - **Text Animations**: Bounce, Pulse, Wave, Glitch, Shake, Typewriter, Heartbeat, Tada, Jello, and more.
-  - **Display Modes**: Control lyric visibility context and **Style Target** (Apply styles to Active Line only or All Lines). Extended with **Static & Unsynchronized display modes** for unsynced or plain text lyrics:
-  - **Static Full Text**: Displays all lines of lyrics statically, auto-scaling font size to fit within the viewport height.
-  - **Compact ( / line, // verse )**: Groups lyrics into paragraphs, joining lines with slashes.
-  - **Compact ( , line, . verse + newline )**: Joins lines with commas and groups verses on newlines.
-  - **Compact ( no symbol, . verse + newline )**: Joins lines with spaces and separates verses with newlines.
-- **AI Transcription**: Built-in integration with **Google Gemini** (supports **Gemini 2.5 Flash** and **3.0 Flash Preview**) for automatic high-accuracy audio transcription.
-  - **Mixed-Language Support**: Expertly handles code-switching (e.g., K-Pop, J-Pop with English) and preserves native scripts (No forced transliteration).
-  - **Line/Word**: Use **Line** for standard formats, and **Word** for precise karaoke highlighting (Enhanced).
-- **Export Lyrics**: Save your transcribed or edited lyrics as `.lrc` (Standard or **Enhanced/Karaoke**), `.srt`, `.vtt` (Standard or **Karaoke**), `.json`, or `.txt` files.
-- **Online Lyric Search**: Built-in search engine to find and download synchronized lyrics from **LRCLIB** with a single click. **Netease** and **Musixmatch** (maybe not working).
-- **Manual Management**: Manually load external `.lrc` / `.srt` files or clear existing lyrics for any track.
-- **Embedded Lyrics Extraction**: Automatically reads lyrics embedded inside audio files on import. Supports:
-  - **MP3**: ID3v2 `USLT` (Unsynchronized Lyrics) tag.
-  - **M4A / ALAC**: MP4 `©lyr` atom.
-  - **FLAC**: Vorbis Comment `LYRICS` / `UNSYNCEDLYRICS` fields (via custom binary parser).
-  - **OGG Vorbis / OPUS**: Vorbis Comment lyrics (via custom binary parser).
-  - **WAV**: RIFF `LIST INFO` lyrics chunks.
-  - **Reload Button**: Re-extract embedded lyrics at any time using the ↻ button in the playlist.
-
-### 🎬 Professional Visual Timeline Editor
- Create complex visual stories synchronized to your music.
-- **Multi-Track Layering**:
-  - **2 Visual Tracks**: Layer videos and images (Background + Overlay).
-  - **2 Audio Tracks**: Layer sound effects or secondary audio.
-- **Full Editing Suite**:
-  - **Undo/Redo** (Ctrl+Z / Ctrl+Y): Never worry about mistakes.
-  - **Copy/Cut/Paste** (Ctrl+C / Ctrl+X / Ctrl+V): Duplicate slides easily.
-  - **Snapping**: Clips snap to each other, lyric timestamps, grid lines, and playhead for pixel-perfect timing.
-  - **Video Looping**: Automatically loops video clips when extended beyond their original duration.
-- **Advanced Selection**:
-  - **Drag Selection**: Click and drag on the timeline background to interpretively select multiple clips.
-  - **Shift + Click** for range selection.
-  - **Ctrl + Click** for multi-selection.
-- **Precise Control**:
-  - **Arrow Keys**: Nudge selected clips by 0.1s.
-  - **Lyric Navigation**: Click any lyric block on the timeline to jump the player to that exact time.
-  - **Volume Mixing**: Independent mute/volume control for every video and audio clip on the timeline.
-  - **Playback Speed**: Precise manual control for playback rate (0.25x - 2.0x) on individual video and audio clips.
-- **Visual Effects**:
-  - **Background Blur**: Toggle between 'Sharp' and 'Blur' for background media.
-
-![Timeline Editor](screenshot-timeline.jpg)
-
-### 🎥 Content Creation & Export
-- **Flexible Render Settings**:
-  - **Render Engine**: 
-    - **Browser Recorder**: Fast, real-time capture.
-    - **WebCodecs (New)**: Hardware-accelerated rendering for maximum speed and performance.
-    - **FFmpeg WASM**: Professional frame-by-frame rendering (No dropped frames).
-  - **Resolution**: 720p / 1080p.
-  - **Frame Rate**: Support for **24, 30, and 60 FPS**.
-  - **Quality**: Adjustable bitrate presets (**Low, Med, High**).
-  - **Visual Toggles**: Quick toggle for **Background Blur** with **Adjustable Blur Strength** directly in the export panel.
-  - **Codecs**: Full control over output format, supporting **H.264 (MP4)**, **VP9 (WebM)**, and **AV1** (where supported).
-- **Aspect Ratios**: 
-  - **16:9** (Landscape - YouTube)
-  - **9:16** (Vertical - TikTok/Reels)
-  - **1:1** (Square - Instagram)
-  - **4:5** (Portrait - Instagram Feed)
-  - **3:4** (Portrait - Standard)
-  - **4:3** (Landscape - Classic TV)
-  - **2:3** (Portrait - Digital Photography)
-  - **3:2** (Landscape - Classic Photo)
-  - **2:1** (Landscape - Panoramic)
-  - **20:9** (Landscape - Modern Mobile, Cinematic)
-  - **21:9** (Landscape - Ultra Widescreen)
-  - **1:2** (Vertical - Split Screen)
-- **Rendering Scope**: Batch export the entire playlist or just the current song.
-- **Settings Management**:
-  - **Random Settings Generator**: Click "Randomize" in the Render Settings panel to instantly generate random styling combinations across backgrounds, typography, alignments, text effects, visualizations, transition effects, and layouts.
-  - **JSON Import/Export**: Backup, share, or restore your exact render configurations (including custom fonts, colors, and layouts) with a single click.
-  - **Reset to Defaults**: Improved reset functionality to verify and clear all custom font selections and return to factory defaults.
-- **Audio Visualization**:
-  - **Live & Export**: Real-time frequency analysis that works in the player AND is baked into your exported videos (WebCodecs/FFmpeg).
-  - **Visualizer Types**: **Bars**, **Wave**, **Waveform (Filled)**, **Spectrum**, **Spectrogram**, **Stereo Field**, **Circular**, **Pulse Ring**, and **Particles**.
-  - **Customization**: Full control over Position (Bottom, Center, Full), Colors (Gradient, Rainbow, Accent), Opacity, and Sensitivity.
-- **Advanced Backgrounds**:
-  - **Timeline Media**: Use your custom images and videos from the timeline.
-  - **Custom Image**: Direct support for single custom background images.
-  - **Smart Gradient**: Generate beautiful gradients from a single color.
-  - **Custom Gradient**: Manually define complex linear gradients.
-  - **Solid Color**: Simple, clean backgrounds.
-  - **Gradient Overlay**: Optional bottom-up fade for better text readability.
-  - **Real Color Media**: Toggle to disable the default dark dimming overlay, allowing background visual colors to pop.
-  - **Three.js 3D Background (New)**: 15 fully animated, WebGL-powered 3D scenes — **Stars**, **Cubes**, **Waves**, **Particles**, **Galaxy**, **DNA Helix**, **Aurora**, **Matrix**, **Nebula**, **Rings**, **Tunnel**, **Warp**, **CyberGrid**, **Vortex**, and **Crystals** — with customizable color, speed, and cinematic auto-camera movement. Fully composited into video exports.
-- **Lyric Display Control**:
-  - **Modes**: Show All, Previous/Next, Next Only, or Active Line Only highlighting.
-  - **Visibility**: Toggle Lyrics, Title, Artist, Cover Art, and Intro overlays independently.
-  - **Intro Overlay**: 
-    - **Modes**: Toggle 'Auto' (MetaData triggers on every song) or 'Manual' (Custom text triggers only on first playlist song).
-- **Typography & Visual Effects**:
-  - **Font Freedom**: Huge library of built-in fonts (Sans, Serif, Display, Handwriting, etc.), **Custom Font Upload**, and **Individual Google Font** loading for separate elements.
-  - **Text Styling**: Controls for alignment, vertical position (**adjustable Top/Bottom margins**), size, and color.
-  - **Text Transformations**: **Uppercase**, **Lowercase**, **Title Case**, **Sentence Case**, and **Invert Case** overrides.
-  - **Effects Library**: 
-    - **Text Effects**: Shadow, Glow, Neon, 3D Pop, Glitch, Retro, and more.
-    - **Animations**: Pulse, Bounce, Wave, Shake, Typewriter, Heartbeat, Flash, Spin, and more.
-    - **Transitions**: Smooth Fade, Slide, Zoom, Flip, Motion Blur, Spiral, Shatter, and **None** (Instant Cut).
-- **Song & Channel Info Customization**:
-  - **Positioning**: 9-point grid automatic positioning (Top-Left to Bottom-Right).
-  - **Song Styles**: Classic (Detailed), Modern + Cover, Circle Cover, Boxed Cover, Minimal (Text Only).
-  - **Channel Styles**: Classic, Modern, Minimal, Logo Only (**SVG Support**), Boxed.
-  - **Typography Control**: Custom Font Family, Weight (**Bold**), Style (**Italic**), and **Custom Color** for both Channel and Song Info.
-  - **Padding**: Fine-tune margin from screen edges for both **Song Info** and **Channel Info** (Visible in Minimal Mode).
-- **Smart Overlays**: Automatically generates metadata overlays for "Now Playing" visuals.
-- **Dynamic Blur**: Apply real-time Gaussian-style blur to background images or videos for better lyric readability.
-- **High-Fidelity Rendering**: Native **Canvas 2D** rendering allows for pixel-perfect text at any frame rate.
-
-![Render Settings Panel](screenshot-render-settings1.jpg)
-
-![Render Settings Panel Output Settings](screenshot-render-settings2.jpg)
-
-![Export Interface](screenshot-render.jpg)
-
-### 🛠 Technical Architecture
-- **Dual Rendering Engine**: 
-  - **MediaRecorder (Real-time)**: Captures the canvas stream in real-time. Fast for simple exports.
-  - **WebCodecs API**: Uses the modern `VideoEncoder` API to access hardware encoding capabilities directly from the browser, offering a middle-ground between speed and quality.
-  - **FFmpeg WASM (Offline/High-Quality)**: Client-side video encoding using FFmpeg compiled to WebAssembly. Supports frame-by-frame rendering for perfect synchronization and higher bitrates, regardless of computer speed.
-  - **Robust Path Discovery**: Automatically probes multiple local paths (Absolute, Relative, BaseURL, Origin) to find core binaries in any hosting environment.
-  - **Binary Integrity**: Uses binary signature verification (`\0asm` check) to prevent application-level redirects from being mistaken for valid assets.
-  - **Offline Persistence**: Leverages PWA Service Workers with an expanded 50MB cache limit to ensure professional rendering is available anywhere.
-  - **Smart Fallback**: Automatically switches between Multi-threaded (SharedArrayBuffer) and Single-threaded cores based on browser capabilities and server headers (COOP/COEP).
-- **Typography Engine**:
-  - **Google Fonts Offline**: Integrated Workbox runtime caching to ensure all typography presets and custom Google Fonts are preserved for offline content creation.
-- **Rendering Pipeline**: Highly optimized **Canvas 2D** pipeline. Text rendering is handled natively by the browser, ensuring perfect clarity. Advanced effects (Fire, VHS, etc.) are simulated in Canvas to match CSS visuals during export.
-- **OffscreenCanvas Ready**: The application structure decouples rendering logic from the UI thread (`utils/canvasRenderer.ts`). This architecture supports `OffscreenCanvas` and Web Workers.
-- **WebGPU Note**: While not currently used, the modular design allows for a hybrid approach in the future (e.g., using WebGPU for background visualizers while keeping Canvas 2D for crisp text overlays).
-
-## Related Tools
-Check out our other AI-powered tools for music and visuals:
-- **[LyricsEditor](https://dotslashgabut.github.io/lyricseditor/)**: Premium lyrics editor for LRC, SRT, VTT, TTML & subtitle sync tool.
-- **[LyricalEditorPlus](https://dotslashgabut.github.io/lyricaleditorplus/)**: Universal lyrics/subtitle editor & AI-powered lyrics generator.
-- **[GeminiTranscription](https://ai.studio/apps/drive/1IQUhhLIAJ_dYYbcOLni-x8LLk7Py4SSX?fullscreenApplet=true)**: AI-powered transcription for your audio files.
-
-## Keyboard Shortcuts
-
-| Key | Function |
-| :--- | :--- |
-| **N** | Play Next Song |
-| **B** | Play Previous Song |
-| **Space / K** | Play / Pause |
-| **Arrow Left / Right** | Rewind / Forward 5s (Player) OR Nudge Slide (Editor) |
-| **Arrow Up / Down**| Navigate Playlist Tracks (Playlist) OR Scroll Lyrics (Player) |
-| **M** | Toggle Mute |
-| **R** | Toggle Repeat Mode (Off -> All -> One) |
-| **J** | Next Visual Preset |
-| **+ / -**| Increase / Decrease Lyric Font Size |
-| **S** | Stop & Reset |
-| **X** | Split Clip at Playhead (Timeline Editor) |
-| **H** | Toggle UI Auto-Hide Inhibit |
-| **G** | Cycle Lyric Display Mode |
-| **C** | Cycle Text Case |
-| **L** | Random Settings (Generate Random Style) |
-| **Q** | Toggle Lyric Visibility Mode: Default / Auto |
-| **T** | Open/Close Timeline Editor |
-| **D** | Toggle Render Settings Panel |
-| **I** | Toggle Header Info |
-| **O** | Toggle Minimal Mode |
-| **Y** | Toggle Shortcut Info Overlay |
-| **P** | Toggle Player Controls |
-| **X** | Toggle Highlight Effect On/Off |
-| **Z** | Cycle Next Highlight Effect |
-| **F** | Toggle Fullscreen *(Note: may be blocked if a browser dialog is open — use **F11** or **Fn+F** for native browser fullscreen instead)* |
-| **1** | Load Audio / Video File |
-| **2** | Load Lyrics / Subtitle File |
-| **3** | Load Font File |
-| **8** | Decrease UI Scale (Zoom UI) |
-| **9** | Increase UI Scale (Zoom UI) |
-| **0** | Reset UI Scale to 100% |
-| **Delete** | Remove selected Playlist Item or Visual Slide |
-| **Ctrl + Z / Y** | Undo / Redo (Editor) |
-| **Ctrl + C / X / V** | Copy / Cut / Paste (Editor) |
-| **Escape** | Abort Video Rendering / Close Modal |
-| **Enter** | Confirm Dialog Action |
-| **Ctrl/Cmd + Shift + E** | Export / Render Video |
-
-### Mouse & Touch Gestures
-| Action | Function |
-| :--- | :--- |
-| **Double Click / Tap** | Toggle Minimal Mode (O) |
-| **Click Lyric Line** | Seek to that timestamp |
-| **Click Active Lyric** | Copy lyric text to clipboard |
-| **Drag Timeline** | Select multiple clips (Editor) |
-| **Shift + Click** | Range Selection (Editor) |
-| **Ctrl + Click** | Multi-Selection (Editor) |
-
-
-## Installation
-
-This application is built with React + Vite and requires **Node.js** to run.
-
-1.  **Prerequisites**: Install **Node.js** (LTS version recommended).
-2.  **Install Dependencies**:
-    ```bash
-    npm install
-    ```
-3.  **Start the Server**:
-    ```bash
-    npm run dev
-    ```
-4.  **Launch**: Open the URL shown in your terminal (usually `http://localhost:5173`) in Chrome or Edge.
-
-## Configuration (Optional)
-
- To use the **AI Transcription** feature, you need a Google Gemini API Key.
-
- 1.  Get a free API Key from [Google AI Studio](https://aistudio.google.com/app/apikey).
- 2.  Create a file named `.env.local` in the root directory.
- 3.  Add your API key:
-     ```env
-     GEMINI_API_KEY=your_api_key_here
-     ```
-     _Alternatively, you can enter the API Key directly in the application UI (Config Icon)._
- 4.  **Restart Server**: If the server is running, restart it (`Ctrl+C` then `npm run dev`) to load the new environment variables.
-
-
-## How to Use
-
-1. **Build a Playlist**: 
-    - Click **"Add Audio & Lyrics"** in the Playlist panel.
-    - Select multiple audio files (MP3, M4A, FLAC, OGG, OPUS, WAV) and lyric files at once. The app will pair them automatically.
-    - **Embedded lyrics** are extracted automatically from all supported formats on import.
-2. **Design Visuals**: 
-    - Press **T** to open the Timeline.
-    - Drag & Drop media or use "Import Media".
-    - Use **Ctrl+C / Ctrl+V** to duplicate sequences.
-3. **Export Video**:
-    - Choose your resolution and aspect ratio (e.g., **9:16** for TikTok).
-    - Click the **Video Camera** icon.
-    - Wait for the render to complete (Video plays in real-time).
+![主界面](docs/A0-空状态-中文界面.png)
 
 ---
 
-## Panduan Pengguna (Bahasa Indonesia)
+## 怎么用
 
-### Fitur Utama Baru
-- **Tipografi Super Canggih**: Load **Google Fonts Individu** secara terpisah untuk Lirik, Info Lagu, dan Nama Channel. Termasuk kontrol granular untuk gaya (Bold/Italic) dan warna kustom tiap elemen.
-- **Rendering Kilat (WebCodecs)**: Engine baru memanfaatkan akselerasi hardware (GPU) untuk ekspor video hingga 5x lebih cepat. Tetap tersedia opsi **FFmpeg** untuk kualitas frame-by-frame.
-- **Manajemen Pengaturan Lengkap**: **Ekspor/Impor JSON** untuk menyimpan/membagikan konfigurasi render. Dilengkapi dengan **Random Settings Generator** (tombol Randomize) untuk acak gaya visual instan, serta tombol **Reset** yang disempurnakan.
-- **Workspace Drag & Drop**: Tarik dan lepas (drag & drop) file audio/video, lirik, atau font langsung ke layar utama player untuk memuatnya secara instan dengan tampilan overlay visual yang informatif.
-- **Ekstraksi Lirik Tersemat**: Fitur canggih untuk membaca lirik yang tertanam langsung di dalam file audio (FLAC Vorbis Lyrics, MP4 Lyrics, ID3v2 USLT, dll) secara otomatis saat import.
-- **Timeline Lirik Interaktif**: Lihat cuplikan lirik di playlist. Klik baris mana saja untuk langsung memutar lagu itu.
-- **Format & Tampilan Luas**: Dukungan lirik `.lrc`, `.srt`, **`.vtt` (termasuk Karaoke/Word-Level)**, dan **`.ttml` / `.xml`**. Mendukung **Mode Tampilan Statis / Unsynced** (Statis Full Text dan format compact baris/paragraf).
-- **Support Video**: Load file video (MP4, WebM) sebagai track audio + background otomatis.
-- **Karaoke Kustom**: Pilihan efek highlight baru (**Neon, Glow, Box, Pill**) dengan **Pewarnaan Kustom** (Text & Background Color).
-- **Visual Efek**: Fitur **Background Blur** (dengan **Slider Kekuatan Blur**), **Smart Gradient**, dan **Text Animation** (Bounce, Pulse, Glitch, dll).
-- **Kustomisasi Info Lagu**: Atur posisi, gaya tampilan, jarak tepi (padding), serta **Intro** teks (Auto/Manual).
-- **AI Transkripsi**: Dukungan model **Gemini 2.5 Flash** dan **3.0 Flash Preview** untuk transkripsi audio otomatis yang presisi.
-- **Ekspor Lirik**: Simpan hasil transkripsi dalam format `.lrc`, `.srt`, `.vtt`, `.json`, atau `.txt`.
-- **Timeline Canggih**: Dukungan **Multi-Layer** (2 Visual + 2 Audio), **Undo/Redo**, **Cut/Copy/Paste**, **Drag Selection**, dan **Snapping** otomatis.
-- **Kontrol Skala & Zoom UI**: Tombol `-` dan `+` di samping ikon eye pada control footer untuk memperbesar/memperkecil seluruh tampilan antarmuka (UI zoom) secara langsung, klik persentase untuk mereset skala ke 100%, atau gunakan shortcut tombol **8** (kecilkan) dan **9** (besarkan). Pintasan keyboard (hotkey) global juga dilindungi agar tidak memblokir shortcut bawaan browser/OS saat tombol modifier (`Ctrl`/`Cmd`/`Alt`) sedang ditekan.
-- **Shortcut Baru**: Tekan **1** (Muat Audio/Video), **2** (Muat Lirik), **3** (Muat Font), **D** (Render Settings), **O** (Minimal Mode), **Y** (Info Shortcut), **N**/**B** (Next/Prev), **M** (Mute), **R** (Repeat), **L** (Playlist), **8**/**9** (Skala UI - tanpa tombol modifier), **+/-** (Font - tanpa tombol modifier), dan **Ctrl/Cmd+Shift+E** (Export). Ditambah pencegahan bubbling pintasan saat mengetik di form input.
+### 离线包（推荐）
 
-### Cara Install & Jalankan
-Aplikasi ini berbasis web modern (React + Vite).
+到 [Releases](../../releases) 下载 `dokidoki-offline.zip`，解压到任意位置，双击 `启动 dokidoki.cmd`。浏览器会自动打开 `http://localhost:3000/`。用完关掉那个命令行窗口就停了。
 
-1.  **Persiapan**: Pastikan PC kamu sudah terinstall **Node.js** (Versi LTS disarankan).
-2.  **Install Dependensi**:
-    Buka terminal/CMD di folder project, lalu ketik:
-    ```bash
-    npm install
-    ```
-3.  **Jalankan Aplikasi**:
-    ```bash
-    npm run dev
-    ```
-4.  **Buka Browser**: Akses alamat lokal yang muncul (biasanya `http://localhost:5173`) menggunakan Chrome atau Edge.
+不需要装 Node、Python 或任何运行环境，Windows 自带的 PowerShell 就够。
 
-### Alur Kerja (Workflow)
-1.  **Siapkan Playlist**: 
-    - Klik **"Add Audio & Lyrics"** atau cukup **Drag & Drop** file audio (MP3, M4A, FLAC, OGG, OPUS, WAV) dan file lirik kamu.
-    - File akan otomatis berpasangan jika namanya sama, dan lirik tersemat akan diekstrak secara otomatis.
-2.  **Desain Visual (Editor Timeline)**:
-    - Tekan **T** untuk membuka Timeline Editor.
-    - Drag gambar/video ke track visual.
-    - Gunakan **Ctrl+C / Ctrl+V** untuk duplikasi slide, dan **Drag** ujung klip untuk memanjangkan durasi (Video otomatis looping!).
-3.  **Render Settings**
-    - Tekan **D** untuk membuka Render Settings.
-    - Pilih Preset tampilan yang sesuai.
-    - Atur Desain Visual (Background, Text, dan lainnya).
-    - Atur Layout Logo Channel, Nama Channel, Lirik, dan Info Lagu.
-4.  **Ekspor Video**:
-    - Tekan **Ctrl/Cmd + Shift + E** atau klik ikon Video.
-    - Pilih **Render Engine**:
-      - **WebCodecs**: Paling ngebut (menggunakan GPU). Cocok untuk preview cepat & upload sosmed.
-      - **FFmpeg**: Kualitas maksimal (Frame-by-Frame). Gunakan jika butuh presisi tinggi.
-    - Tentukan Resolusi (720p/1080p) dan **Format Rasio** (misal 9:16 untuk TikTok).
-    - Klik **Start Render** dan tunggu hingga selesai.
+> **不要直接双击 `app/index.html`。** 那是 Vite 打的 ES Module 包，`file://` 下浏览器会拒绝加载模块脚本；而且 FFmpeg WASM 需要 `SharedArrayBuffer`，必须由服务端下发 COOP / COEP 响应头。所以必须走一个本地 HTTP 服务 —— 那个 `.cmd` 就是干这个的，它调用同目录的 `server.ps1`。
+
+### 从源码跑
+
+```bash
+npm install --legacy-peer-deps   # 这个参数不能省
+npm run dev                      # 开发，http://localhost:5173
+npm run build                    # 构建到 dist/
+npm run preview                  # 预览构建产物，http://localhost:4173
+```
+
+`--legacy-peer-deps` 是必须的：上游 lockfile 把 `vite@8.0.16` 和 `vite-plugin-pwa@1.2.0` 锁在一起，而后者的 peer 只声明到 vite 7，npm 会直接报冲突退出。
+
+### 重新打离线包
+
+```bash
+python offline/打包离线版.py
+```
+
+跑一次 `npm run build`，把 `dist/` 和三个启动脚本按中文 Windows 的编码规范打包成 `offline/dokidoki-offline.zip`：
+
+| 文件 | 编码 |
+| :--- | :--- |
+| `启动 dokidoki.cmd` | GBK + CRLF，无 BOM |
+| `使用说明.txt` | GBK + CRLF，无 BOM |
+| `server.ps1` | UTF-8 **带 BOM** |
+
+这三条不是洁癖。PowerShell 5.1 会把无 BOM 的 `.ps1` 按 GBK 解码，中文会把字符串引号当场吃掉，脚本直接语法报错。
+
+---
+
+## 相比原版改了什么
+
+| 改动 | 说明 |
+| :--- | :--- |
+| **中文界面** | 主界面 + 三个设置面板（渲染设置 / 视觉编辑器 / 播放列表）全部汉化，右上角一键切换中英文。字体名（Roboto）、编解码器名（H.264）、格式缩写（SRT / VTT）刻意保留英文 |
+| **悬浮视频小窗** | 视频只在左侧小窗播放，主画面背景保持不变。`W` 键显示 / 隐藏，关掉后点底部「恢复视频小窗」按钮也能找回来。可拖动、可拖右下角缩放，位置和大小会记住 |
+| **字幕频谱对齐** | 见下一节 |
+| **拖放配对** | 媒体和字幕文件名完全不一样也能自动配对；先拖字幕再拖音频，字幕不会被冲掉 |
+| **配色** | 近黑底 + 暖琥珀，去掉原来的紫色 |
+| **完全离线** | 加载后不再请求任何外部地址，断网可用 |
+
+顺手修掉的几个旧问题：设置面板原来不跟着切语言；视频会被自动设成主背景；两个底部 tooltip 标的按键是错的（「播放列表 (L)」实际是 `P`，「快捷键 (Y)」实际是 `K`）。
+
+---
+
+## 字幕频谱对齐
+
+场景是音频播客和没有背景音乐的采访视频。这类素材的人声起音点很清楚，所以可以靠频谱把字幕位置找回来。
+
+**单锚点 —— 整体平移**
+
+1. 播放到某一行，或直接在字幕列表里点那一行
+2. 点底部的十字准星按钮
+3. 它在这行字幕附近的时间窗里找**起音强度最大的位置**，把这行吸附过去，然后按差值整体平移整条时间轴
+
+**双锚点 —— 修正累积漂移**
+
+字幕「越到后面越偏」很常见，通常是导出时的累积误差。做法是在文件**开头附近**和**结尾附近**各点一行吸附，两个 offset 之间做线性插值，每条字幕拿到自己的修正值。如果两个锚点算出来的偏移差得很小（小于 0.1 秒），说明就是单纯平移，取平均值即可。
+
+算法在 `utils/onsetDetect.ts`：借 `decodeAudioData` 顺手在 8kHz 的 `OfflineAudioContext` 上解码（避免 48kHz 立体声把内存撑爆）→ 200–3500Hz 带通滤出人声频段 → 10ms 短时 RMS → 正向一阶差分得起音强度 → 找局部极大值，再用抛物线插值求亚帧峰位。36 分钟的播客大约跑 5–14 秒。
+
+---
+
+## 快捷键
+
+按 `K` 看完整列表。常用的：
+
+| 键 | 作用 |
+| :--- | :--- |
+| `Space` | 播放 / 暂停 |
+| `S` / `V` | 停止 |
+| `B` / `N` | 上一首 / 下一首 |
+| `←` `→` | 后退 / 前进 5 秒 |
+| `↑` `↓` | 播放列表里换曲 / 播放器里滚动字幕 |
+| `+` / `-` | 字幕字号 |
+| `M` | 静音 |
+| `R` | 循环模式 |
+| `1` `2` `3` | 载入 音频·视频 / 字幕 / 字体 |
+| `W` | 显示 / 隐藏悬浮视频小窗 |
+| `P` | 播放列表 |
+| `T` | 时间轴编辑器 |
+| `D` | 渲染设置 |
+| `G` | 字幕显示模式 |
+| `Q` | 字幕可见性：默认 / 自动 |
+| `O` | 极简模式 |
+| `H` | 锁定界面（禁止自动隐藏） |
+| `I` / `Y` | 顶部信息栏 / 底部控制栏 |
+| `F` | 全屏 |
+| `8` `9` `0` | 界面缩放 减 / 加 / 复位 |
+| `Ctrl+Shift+E` | 导出视频 |
+
+鼠标：双击画面切极简模式；点字幕行跳到该时间；点当前高亮的那行复制文字。
+
+---
+
+## 支持的文件
+
+- **音频 / 视频**：能不能放取决于浏览器自身解码能力。mp3、wav、flac、ogg、m4a、aac、opus 没问题；mp4、mov、webm、mkv 只要里面是 H.264 / H.265 + AAC 也没问题。**avi、wmv、flv 基本放不出来** —— 这个版本没有抽音轨兜底，遇到这类格式先转成 mp4 或 mp3。
+- **字幕 / 歌词**：`.lrc`（含增强型）、`.srt`、`.vtt`（含词级时间戳）、`.ttml`、`.xml`
+- **字体**：`.ttf` `.otf` `.woff` `.woff2`。内置 ChillRoundM 寒蝉圆体（默认）和 OPPOSans 粗体
+- 拖入时可以把「媒体 + 字幕」一起拖进来，文件名不一样也会自动配对
+
+---
+
+## 已知限制
+
+- 播放格式受浏览器解码能力限制，见上一节
+- 频谱对齐对**无背景音乐**的素材效果最好；有 BGM 时鼓点会干扰起音检测，可能吸到鼓点上
+- 渲染长视频（比如 1080p 一小时的播客）很吃内存，建议分段
+- 上游仓库没有声明许可证，这个 fork 也不声明
+
+---
+
+## 来源与目录
+
+上游完整的功能说明（英文 / 印尼文，覆盖渲染引擎、视觉编辑器、导出等所有能力）存档在 [`docs/README-upstream.md`](docs/README-upstream.md)。
+
+```
+App.tsx                 主界面（播放器 / 字幕 / 悬浮小窗 / 快捷键）
+components/             渲染设置、视觉编辑器、播放列表、悬浮小窗等
+locales/zh.ts           主界面词条
+locales/zhPanels.ts     三个设置面板的词条
+utils/onsetDetect.ts    字幕频谱吸附
+utils/parsers.ts        LRC / SRT / VTT / TTML 解析
+offline/                离线启动器与打包脚本
+docs/                   界面截图
+public/fonts/           内置字体（已转 woff2）
+```

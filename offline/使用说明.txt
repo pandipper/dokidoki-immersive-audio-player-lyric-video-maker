@@ -32,8 +32,15 @@ COOP / COEP 响应头。所以必须走一个本地 HTTP 服务。
 
 四、支持的文件格式
 --------------------------------
-音频 / 视频：mp3、wav、flac、ogg、m4a、aac、wma、opus、
-             mp4、mkv、webm、avi、mov、m4v、ogv
+音频 / 视频：能不能放，取决于浏览器自己会不会解码。
+
+  没问题：mp3、wav、flac、ogg、m4a、aac、opus
+  一般没问题：mp4、mov、webm、mkv（里面是 H.264 / H.265 + AAC）
+  基本放不出来：avi、wmv、flv
+
+本版本没有做「抽音轨」兜底，遇到放不出来的格式，
+先用别的工具转成 mp4 或 mp3 再用。
+
 字幕 / 歌词：lrc、srt、vtt、ttml、xml
 字体：ttf、otf、woff、woff2
 
@@ -64,3 +71,25 @@ https://github.com/pandipper/dokidoki-immersive-audio-player-lyric-video-maker
   npm run build                      ← 构建到 dist/
 
 构建产物就是本压缩包里 app 文件夹的内容。
+
+
+七、遇到问题怎么办
+--------------------------------
+· 双击后窗口一闪就没了
+  Windows 的脚本执行策略挡住了。在本文件夹的地址栏里输入 cmd 回车，
+  然后手动敲这一行（路径按实际情况改）：
+    powershell -ExecutionPolicy Bypass -File "server.ps1" -Port 3000
+
+· 页面白屏
+  看地址栏是不是以 http://localhost:3000/ 开头。
+  如果是 file:///... 开头，说明直接打开了 index.html，请改用启动脚本。
+
+· 提示端口被占用
+  脚本会自动从 3000 往后找空闲端口，具体号码打印在黑色窗口里，
+  照着那个号码访问即可。
+
+· 浏览器没有自动打开
+  手动访问 http://localhost:3000/ 。
+
+· 想换端口
+    powershell -ExecutionPolicy Bypass -File "server.ps1" -Port 8080

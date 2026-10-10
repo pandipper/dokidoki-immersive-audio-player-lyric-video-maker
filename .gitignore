@@ -33,5 +33,5 @@ dist-ssr
 !.env.example
 
 # 离线版打包产物（源码在 offline/，产物请走 GitHub Release）
-offline/_stage/
 offline/*.zip
+offline/_*

@@ -3841,7 +3841,7 @@ function App() {
                   if (newMode) setActiveTab(TabView.PLAYER);
                 }}
                 className={`p-2 rounded-full transition-colors ${isPlaylistMode ? 'bg-orange-600 text-white' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
-                title={tr('Toggle Playlist (L)')}
+                title={tr('Toggle Playlist (P)')}
               >
                 <ListMusic size={20} />
               </button>
@@ -3871,7 +3871,7 @@ function App() {
                   setShowShortcutInfo(!showShortcutInfo);
                 }}
                 className={`p-2 rounded-full transition-colors ${showShortcutInfo ? 'bg-amber-500 text-black' : 'bg-black/30 text-zinc-300 hover:bg-white/10'}`}
-                title={tr('Keyboard Shortcuts (Y)')}
+                title={tr('Keyboard Shortcuts (K)')}
               >
                 <Keyboard size={20} />
               </button>
@@ -5508,7 +5508,7 @@ function App() {
                     <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Export Video')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">Ctrl+Shift+E</span></div>
                     <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Font Size')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">+ / -</span></div>
                     <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Cycle Visual Preset')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">J</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Cycle Highight Effect')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">Z</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Cycle Highlight Effect')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">Z</span></div>
                     <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Toggle Highlight')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">X</span></div>
                     <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Cycle Text Case')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">C</span></div>
                     <div className="flex justify-between text-sm"><span className="text-zinc-300">{tr('Cycle Lyric Mode')}</span> <span className="font-mono text-amber-400 bg-white/5 px-2 py-0.5 rounded">G</span></div>

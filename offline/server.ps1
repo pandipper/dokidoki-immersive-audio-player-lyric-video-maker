@@ -11,6 +11,11 @@
     为什么用 PowerShell 而不是 Node：
       另一台离线电脑不一定装了 Node。Windows 自带 PowerShell + .NET，
       零安装即可运行。
+
+    兼容性：
+      刻意避开 [Type]::new() 与 $PSScriptRoot 这类新语法/新变量
+      （分别要求 PowerShell 5.0 / 3.0），改用 New-Object 与
+      $MyInvocation.MyCommand.Path，让老机器上的旧版 PowerShell 也能跑。
 #>
 [CmdletBinding()]
 param(
@@ -20,7 +25,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$Root = Join-Path $PSScriptRoot 'app'
+# 不用 $PSScriptRoot（PowerShell 3.0+ 才有），兼容旧版
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+if ([string]::IsNullOrEmpty($ScriptDir)) { $ScriptDir = (Get-Location).Path }
+
+$Root = Join-Path $ScriptDir 'app'
 if (-not (Test-Path -LiteralPath $Root)) {
     Write-Host "[错误] 找不到 app 目录：$Root" -ForegroundColor Red
     exit 1
@@ -59,7 +68,8 @@ $MimeMap = @{
 function Test-PortFree {
     param([int]$Candidate)
     try {
-        $l = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Candidate)
+        # 用 New-Object 而非 [Type]::new()，后者要 PowerShell 5.0+
+        $l = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, $Candidate)
         $l.Start()
         $l.Stop()
         return $true
@@ -79,7 +89,7 @@ if ($chosen -eq 0) {
 }
 
 $prefix = "http://localhost:$chosen/"
-$listener = [System.Net.HttpListener]::new()
+$listener = New-Object System.Net.HttpListener
 # 同时注册 localhost 与 127.0.0.1：HttpListener 按前缀精确匹配主机名，
 # 只注册 localhost 的话用 127.0.0.1 访问会返回 400 Invalid Hostname。
 $listener.Prefixes.Add($prefix)
