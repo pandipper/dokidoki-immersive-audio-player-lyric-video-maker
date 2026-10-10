@@ -1,7 +1,6 @@
 <div align="center">
   <img src="public/icon.svg" width="88" />
   <h1>dokidoki 字幕播放器</h1>
-  <p>字幕是主角，视频是配角。</p>
 </div>
 
 为「**音频播客 / 无背景音乐的视频 + 字幕**」这个场景改的本地播放器。字幕占满主画面，视频缩在左侧小窗里，可以随时调出整条字幕文稿跳转。
@@ -9,108 +8,6 @@
 底子是 [dotslashgabut/immersive-audio-player-lyric-video-maker](https://github.com/dotslashgabut/immersive-audio-player-lyric-video-maker)（v2.3.18），在它上面改造，不是重写。
 
 ![主界面](docs/A0-空状态-中文界面.png)
-
----
-
-## 怎么用
-
-想先看看长什么样，或者需要发给别人用，直接开在线版：
-
-**<https://dokidoki-6mc.pages.dev/>** —— 托管在 Cloudflare Pages，带宽不限，功能完整（`crossOriginIsolated: true`，FFmpeg 渲染引擎可用）。
-
-![线上版载入字幕](docs/G1-线上版-载入36分钟播客字幕.png)
-
-上游作者也部署了一份：[Vercel 版](https://immersiveaudioplayer.vercel.app/)（功能完整）、[GitHub Pages 版](https://dotslashgabut.github.io/audioplayer/)。
-GitHub Pages 那份不能自定义响应头，拿不到 `SharedArrayBuffer`，FFmpeg 渲染引擎用不了，只适合看界面。
-
-### 离线包（推荐）
-
-到 [Releases](../../releases) 下载 `dokidoki-offline.zip`，解压到任意位置，双击 `启动 dokidoki.cmd`。浏览器会自动打开 `http://localhost:3000/`。用完关掉那个命令行窗口就停了。
-
-不需要装 Node、Python 或任何运行环境，Windows 自带的 PowerShell 就够。
-
-> **不要直接双击 `app/index.html`。** 那是 Vite 打的 ES Module 包，`file://` 下浏览器会拒绝加载模块脚本；而且 FFmpeg WASM 需要 `SharedArrayBuffer`，必须由服务端下发 COOP / COEP 响应头。所以必须走一个本地 HTTP 服务 —— 那个 `.cmd` 就是干这个的，它调用同目录的 `server.ps1`。
-
-### 从源码跑
-
-```bash
-npm install --legacy-peer-deps   # 这个参数不能省
-npm run dev                      # 开发，http://localhost:5173
-npm run build                    # 构建到 dist/
-npm run preview                  # 预览构建产物，http://localhost:4173
-```
-
-`--legacy-peer-deps` 是必须的：上游 lockfile 把 `vite@8.0.16` 和 `vite-plugin-pwa@1.2.0` 锁在一起，而后者的 peer 只声明到 vite 7，npm 会直接报冲突退出。
-
-### 重新打离线包
-
-```bash
-python offline/打包离线版.py
-```
-
-跑一次 `npm run build`，把 `dist/` 和三个启动脚本按中文 Windows 的编码规范打包成 `offline/dokidoki-offline.zip`：
-
-| 文件 | 编码 |
-| :--- | :--- |
-| `启动 dokidoki.cmd` | GBK + CRLF，无 BOM |
-| `使用说明.txt` | GBK + CRLF，无 BOM |
-| `server.ps1` | UTF-8 **带 BOM** |
-
-这三条不是洁癖。PowerShell 5.1 会把无 BOM 的 `.ps1` 按 GBK 解码，中文会把字符串引号当场吃掉，脚本直接语法报错。
-
-### 部署到免费静态托管（可选）
-
-这个应用是纯前端，静态托管就够。仓库里的配置已经写好了，三家免费平台都能直接用：
-
-| 平台 | 配置文件 | 免费额度 | 本项目实际部署 |
-| :--- | :--- | :--- | :--- |
-| **Cloudflare Pages** | `public/_headers` | 带宽不限 | <https://dokidoki-6mc.pages.dev/> |
-| **Netlify** | `netlify.toml` | 100 GB/月带宽 | 未部署 |
-| **Vercel** | `vercel.json` | Hobby 计划 | 未部署 |
-
-Netlify 和 Vercel 是「连上 GitHub 仓库 → 选这个 repo → 部署」，配置自动生效。
-Cloudflare Pages 走后台 Git 集成的话，安装命令没有配置文件可放，得在后台设两个东西：
-
-```
-环境变量：SKIP_DEPENDENCY_INSTALL = 1
-构建命令：npm install --legacy-peer-deps && npm run build
-输出目录：dist
-```
-
-（本项目是用 `wrangler` 命令行直传构建产物的，这条路完全跳过云端安装和构建，也就不受 `ERESOLVE` 影响。）
-
-**为什么都要额外处理安装命令**：默认的 `npm install` 会直接失败。上游 lockfile 把 `vite@8.0.16` 和 `vite-plugin-pwa@1.2.0` 锁在一起，而后者的 `peerDependencies` 只声明到 vite 7，npm 会报 `ERESOLVE` 并退出（实测过）。Netlify 用 `NPM_FLAGS`、Vercel 用 `installCommand`、Cloudflare 用 `SKIP_DEPENDENCY_INSTALL`，都写进配置了。
-
-**为什么必须能设响应头**：FFmpeg WASM 要 `SharedArrayBuffer`，而它要求服务端下发 COOP / COEP。上面三家都能设。**GitHub Pages 不能自定义响应头**，所以那边 `crossOriginIsolated` 是 `false`、没有 `SharedArrayBuffer` —— 页面能开、能播、能预览，但 FFmpeg 渲染引擎用不了。
-
-#### Cloudflare Pages 有个 25 MiB 的坎
-
-Cloudflare Pages 的**单个文件上限是 25 MiB**（[官方文档](https://developers.cloudflare.com/pages/platform/limits/)），而 `public/ffmpeg/ffmpeg-core.wasm` 有 **31.2 MB**，直传会被拒。Netlify 和 Vercel 没有这个限制。
-
-绕过办法是**上传时剔掉 `ffmpeg/` 目录**：
-
-```bash
-npm run build
-python offline/准备 Cloudflare 产物.py     # 生成 dist-cf/，剔除 ffmpeg/ 并检查有没有超限文件
-npx wrangler pages deploy dist-cf --project-name=dokidoki --branch=main
-```
-
-第一次要先 `npx wrangler login` 走一次浏览器授权，凭据会存在本地（Windows 在
-`%APPDATA%\xdg.config\.wrangler\config\default.toml`），之后不用再登。
-
-剔掉之后 FFmpeg 引擎**照样能用**：`utils/ffmpegRenderer.ts` 会依次探测本地
-`/ffmpeg/ffmpeg-core.{js,wasm,worker.js}`，三个全失败才回落到 unpkg CDN。所以托管版首次用 FFmpeg 引擎会从 CDN 拉一次 31 MB（之后走浏览器缓存），其余功能完全不受影响。
-
-> 这里有个坑值得记一笔：Cloudflare Pages 对不存在的路径会**返回 200 + `index.html`**（不是 404），
-> 所以 `/ffmpeg/ffmpeg-core.wasm` 拿到的是 687 字节的 HTML 而不是报错。
-> 好在 `loadLocalAsset()` 里有两道校验 —— 首字节是 `<` 或 `Content-Type` 含 `text/html` 就判定为
-> SPA 回退并抛错，`.wasm` 还要过 `\0asm` 魔数。所以它能正确失败并回落 CDN，而不是把 HTML 当 wasm 用。
-
-要是想连这 31 MB 也放本地、托管后一点网络都不依赖，那就用 Netlify 或 Vercel —— 它们没有单文件上限，直接部署整个 `dist/` 就行。
-
-> 走命令行部署时，如果本机装了代理软件（Clash 之类），记得给 wrangler 显式指定代理：
-> `HTTP_PROXY=http://127.0.0.1:7897 HTTPS_PROXY=http://127.0.0.1:7897`，并加
-> `NO_PROXY=localhost,127.0.0.1,::1`（否则 OAuth 回调走代理会 502）。
 
 ---
 
