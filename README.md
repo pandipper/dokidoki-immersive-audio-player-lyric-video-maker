@@ -18,6 +18,8 @@
 
 **<https://dokidoki-6mc.pages.dev/>** —— 托管在 Cloudflare Pages，带宽不限，功能完整（`crossOriginIsolated: true`，FFmpeg 渲染引擎可用）。
 
+![线上版载入字幕](docs/G1-线上版-载入36分钟播客字幕.png)
+
 上游作者也部署了一份：[Vercel 版](https://immersiveaudioplayer.vercel.app/)（功能完整）、[GitHub Pages 版](https://dotslashgabut.github.io/audioplayer/)。
 GitHub Pages 那份不能自定义响应头，拿不到 `SharedArrayBuffer`，FFmpeg 渲染引擎用不了，只适合看界面。
 
