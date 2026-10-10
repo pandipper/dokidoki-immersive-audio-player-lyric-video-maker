@@ -14,9 +14,12 @@
 
 ## 怎么用
 
-想先看看长什么样：上游作者部署了在线版 —— [**Vercel**](https://immersiveaudioplayer.vercel.app/)（功能完整）。
-上游还有一个 [GitHub Pages](https://dotslashgabut.github.io/audioplayer/) 版，但 GitHub Pages 不能自定义响应头，
-拿不到 `SharedArrayBuffer`，FFmpeg 渲染引擎在那边用不了，只适合看界面。
+想先看看长什么样，或者需要发给别人用，直接开在线版：
+
+**<https://dokidoki-6mc.pages.dev/>** —— 托管在 Cloudflare Pages，带宽不限，功能完整（`crossOriginIsolated: true`，FFmpeg 渲染引擎可用）。
+
+上游作者也部署了一份：[Vercel 版](https://immersiveaudioplayer.vercel.app/)（功能完整）、[GitHub Pages 版](https://dotslashgabut.github.io/audioplayer/)。
+GitHub Pages 那份不能自定义响应头，拿不到 `SharedArrayBuffer`，FFmpeg 渲染引擎用不了，只适合看界面。
 
 ### 离线包（推荐）
 
@@ -57,14 +60,14 @@ python offline/打包离线版.py
 
 这个应用是纯前端，静态托管就够。仓库里的配置已经写好了，三家免费平台都能直接用：
 
-| 平台 | 配置文件 | 免费额度 |
-| :--- | :--- | :--- |
-| **Netlify** | `netlify.toml` | 100 GB/月带宽 |
-| **Vercel** | `vercel.json` | Hobby 计划 |
-| **Cloudflare Pages** | `public/_headers` | 带宽不限 |
+| 平台 | 配置文件 | 免费额度 | 本项目实际部署 |
+| :--- | :--- | :--- | :--- |
+| **Cloudflare Pages** | `public/_headers` | 带宽不限 | <https://dokidoki-6mc.pages.dev/> |
+| **Netlify** | `netlify.toml` | 100 GB/月带宽 | 未部署 |
+| **Vercel** | `vercel.json` | Hobby 计划 | 未部署 |
 
 Netlify 和 Vercel 是「连上 GitHub 仓库 → 选这个 repo → 部署」，配置自动生效。
-Cloudflare Pages 的安装命令没有配置文件可放，得在后台设两个东西：
+Cloudflare Pages 走后台 Git 集成的话，安装命令没有配置文件可放，得在后台设两个东西：
 
 ```
 环境变量：SKIP_DEPENDENCY_INSTALL = 1
@@ -72,9 +75,31 @@ Cloudflare Pages 的安装命令没有配置文件可放，得在后台设两个
 输出目录：dist
 ```
 
+（本项目是用 `wrangler` 命令行直传构建产物的，这条路完全跳过云端安装和构建，也就不受 `ERESOLVE` 影响。）
+
 **为什么都要额外处理安装命令**：默认的 `npm install` 会直接失败。上游 lockfile 把 `vite@8.0.16` 和 `vite-plugin-pwa@1.2.0` 锁在一起，而后者的 `peerDependencies` 只声明到 vite 7，npm 会报 `ERESOLVE` 并退出（实测过）。Netlify 用 `NPM_FLAGS`、Vercel 用 `installCommand`、Cloudflare 用 `SKIP_DEPENDENCY_INSTALL`，都写进配置了。
 
 **为什么必须能设响应头**：FFmpeg WASM 要 `SharedArrayBuffer`，而它要求服务端下发 COOP / COEP。上面三家都能设。**GitHub Pages 不能自定义响应头**，所以那边 `crossOriginIsolated` 是 `false`、没有 `SharedArrayBuffer` —— 页面能开、能播、能预览，但 FFmpeg 渲染引擎用不了。
+
+#### Cloudflare Pages 有个 25 MiB 的坎
+
+Cloudflare Pages 的**单个文件上限是 25 MiB**（[官方文档](https://developers.cloudflare.com/pages/platform/limits/)），而 `public/ffmpeg/ffmpeg-core.wasm` 有 **31.2 MB**，直传会被拒。Netlify 和 Vercel 没有这个限制。
+
+绕过办法是**上传时剔掉 `ffmpeg/` 目录**：
+
+```bash
+npm run build
+python offline/准备 Cloudflare 产物.py     # 生成 dist-cf/，剔除 ffmpeg/ 并检查有没有超限文件
+npx wrangler pages deploy dist-cf --project-name=dokidoki --branch=main
+```
+
+剔掉之后 FFmpeg 引擎**照样能用**：`utils/ffmpegRenderer.ts` 会依次探测本地 `/ffmpeg/ffmpeg-core.{js,wasm,worker.js}`，三个全失败才回落到 unpkg CDN。所以托管版首次用 FFmpeg 引擎会从 CDN 拉一次 31 MB（之后走浏览器缓存），其余功能完全不受影响。
+
+要是想连这 31 MB 也放本地、托管后一点网络都不依赖，那就用 Netlify 或 Vercel —— 它们没有单文件上限，直接部署整个 `dist/` 就行。
+
+> 走命令行部署时，如果本机装了代理软件（Clash 之类），记得给 wrangler 显式指定代理：
+> `HTTP_PROXY=http://127.0.0.1:7897 HTTPS_PROXY=http://127.0.0.1:7897`，并加
+> `NO_PROXY=localhost,127.0.0.1,::1`（否则 OAuth 回调走代理会 502）。
 
 ---
 
