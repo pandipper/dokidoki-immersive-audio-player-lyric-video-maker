@@ -53,6 +53,29 @@ python offline/打包离线版.py
 
 这三条不是洁癖。PowerShell 5.1 会把无 BOM 的 `.ps1` 按 GBK 解码，中文会把字符串引号当场吃掉，脚本直接语法报错。
 
+### 部署到免费静态托管（可选）
+
+这个应用是纯前端，静态托管就够。仓库里的配置已经写好了，三家免费平台都能直接用：
+
+| 平台 | 配置文件 | 免费额度 |
+| :--- | :--- | :--- |
+| **Netlify** | `netlify.toml` | 100 GB/月带宽 |
+| **Vercel** | `vercel.json` | Hobby 计划 |
+| **Cloudflare Pages** | `public/_headers` | 带宽不限 |
+
+Netlify 和 Vercel 是「连上 GitHub 仓库 → 选这个 repo → 部署」，配置自动生效。
+Cloudflare Pages 的安装命令没有配置文件可放，得在后台设两个东西：
+
+```
+环境变量：SKIP_DEPENDENCY_INSTALL = 1
+构建命令：npm install --legacy-peer-deps && npm run build
+输出目录：dist
+```
+
+**为什么都要额外处理安装命令**：默认的 `npm install` 会直接失败。上游 lockfile 把 `vite@8.0.16` 和 `vite-plugin-pwa@1.2.0` 锁在一起，而后者的 `peerDependencies` 只声明到 vite 7，npm 会报 `ERESOLVE` 并退出（实测过）。Netlify 用 `NPM_FLAGS`、Vercel 用 `installCommand`、Cloudflare 用 `SKIP_DEPENDENCY_INSTALL`，都写进配置了。
+
+**为什么必须能设响应头**：FFmpeg WASM 要 `SharedArrayBuffer`，而它要求服务端下发 COOP / COEP。上面三家都能设。**GitHub Pages 不能自定义响应头**，所以那边 `crossOriginIsolated` 是 `false`、没有 `SharedArrayBuffer` —— 页面能开、能播、能预览，但 FFmpeg 渲染引擎用不了。
+
 ---
 
 ## 相比原版改了什么

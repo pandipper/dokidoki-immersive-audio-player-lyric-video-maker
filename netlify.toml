@@ -1,3 +1,14 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # 不能省：上游 lockfile 把 vite@8.0.16 和 vite-plugin-pwa@1.2.0 锁在一起，
+  # 后者的 peerDependencies 只声明到 vite 7，默认的 npm install 会 ERESOLVE 直接失败。
+  NPM_FLAGS = "--legacy-peer-deps"
+
+# FFmpeg WASM 需要 SharedArrayBuffer，而它要求这两个响应头。
+# 缺了它们页面照样能开、能播、能预览，但 FFmpeg 渲染引擎会用不了。
 [[headers]]
   for = "/*"
   [headers.values]
