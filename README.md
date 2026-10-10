@@ -5,6 +5,8 @@
 
 为「**音频播客 / 无背景音乐的视频 + 字幕**」这个场景改的本地播放器。字幕占满主画面，视频缩在左侧小窗里，可以随时调出整条字幕文稿跳转。
 
+Demo: https://dokidoki-6mc.pages.dev/
+
 由 [dotslashgabut/immersive-audio-player-lyric-video-maker](https://github.com/dotslashgabut/immersive-audio-player-lyric-video-maker)（v2.3.18）优化而得。
 
 ![主界面](docs/A0-空状态-中文界面.png)
